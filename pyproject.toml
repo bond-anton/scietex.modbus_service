@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scietex.modbus_service"
+dynamic = ["version"]
+description = "Scietex microservice daemon for MODBUS communication"
+authors = [{ name = "Anton Bondarenko", email = "bond.anton@gmail.com" }]
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+readme = "README.md"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = ["scietex.service[valkey]~=0.2.0", "scietex.hal.serial~=1.2.0"]
+
+[project.urls]
+"Homepage" = "https://github.com/bond-anton/scietex.modbus_service"
+"Bug Tracker" = "https://github.com/bond-anton/scietex.modbus_service/issues"
+
+[project.optional-dependencies]
+dev = ["tox"]
+test = ["flake8", "pytest", "pytest-asyncio"]
+lint = ["pylint"]
+
+[project.scripts]
+start-modbus-service = "scietex.modbus_service.run_worker:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "scietex.modbus_service.version.__version__" }
+
+[tool.setuptools.package-data]
+"scietex.modbus_service" = ["py.typed"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.mypy]
+python_version = "3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

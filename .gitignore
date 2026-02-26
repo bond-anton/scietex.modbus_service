@@ -1,0 +1,7 @@
+# Project exclude paths
+/.venv
+/.tox
+/.mypy_cache
+*.egg-info/
+uv.lock
+__pycache__

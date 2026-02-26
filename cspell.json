@@ -1,0 +1,22 @@
+{
+  "version": "0.2",
+  "ignorePaths": [],
+  "dictionaryDefinitions": [],
+  "dictionaries": [],
+  "words": [
+    "scietex",
+    "modbus",
+    "valkey",
+    "venv",
+    "pycache",
+    "mypy",
+    "setuptools",
+    "pylint",
+    "pytest",
+    "asyncio",
+    "pythonpath",
+    "Bondarenko"
+  ],
+  "ignoreWords": [],
+  "import": []
+}
