@@ -18,6 +18,7 @@ async def main_async(args) -> int:
     parser.add_argument(
         "--worker-id",
         type=int,
+        default=1,
         help="Worker id (integer value, optional, defaults to 1)",
     )
     parsed_args = parser.parse_args(args)

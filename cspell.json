@@ -15,7 +15,8 @@
     "pytest",
     "asyncio",
     "pythonpath",
-    "Bondarenko"
+    "Bondarenko",
+    "hgetall"
   ],
   "ignoreWords": [],
   "import": []

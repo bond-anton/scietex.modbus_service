@@ -15,7 +15,10 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 requires-python = ">=3.10"
-dependencies = ["scietex.service[valkey]~=0.2.0", "scietex.hal.serial~=1.2.0"]
+dependencies = [
+    "scietex.service[valkey]~=0.2.0",
+    "scietex-hal-serial~=1.2.0",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/bond-anton/scietex.modbus_service"
