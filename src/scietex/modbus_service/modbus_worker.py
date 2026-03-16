@@ -8,6 +8,7 @@ import importlib
 from typing import Type, Any
 import logging
 from uuid import uuid4
+from serial.tools import list_ports
 
 from scietex.hal.qcm.base.rs485 import RS485GatedFTM
 
@@ -95,20 +96,30 @@ class ModbusWorker(ValkeyWorker):
             elif task_data.get("task") == Tasks.MODBUS_CONNECT:
                 if count := await self.connect_modbus():
                     result["data"] = {
+                        "type": DataTypes.MODBUS_CONNECTIONS_COUNT,
+                        "payload": count,
+                    }
+                    break
+                else:
+                    await asyncio.sleep(5)
+            elif task_data.get("task") == Tasks.MODBUS_MONITOR:
+                await asyncio.sleep(0.5)
+                status = await self.check_modbus_connection()
+                result["data"] = {
+                    "type": DataTypes.MODBUS_STATUS,
+                    "payload": status,
+                }
+                break
+
+            elif task_data.get("task") == Tasks.DEVICES_CONNECT:
+                if count := await self.connect_devices():
+                    result["data"] = {
                         "type": DataTypes.COUNT,
                         "payload": count,
                     }
                     break
                 else:
                     await asyncio.sleep(5)
-
-            elif task_data.get("task") == Tasks.DEVICES_CONNECT:
-                count = await self.connect_devices()
-                result["data"] = {
-                    "type": DataTypes.COUNT,
-                    "payload": count,
-                }
-                break
 
             elif task_data.get("task") == Tasks.DEVICE_MONITOR:
                 device_name = task_data.get("data")
@@ -130,7 +141,7 @@ class ModbusWorker(ValkeyWorker):
                     else:
                         await asyncio.sleep(1)
                     data = await device["device"].read_parameters()
-                    # data = await device["device"].get_frequency()
+                    print("MODBUS PORT HEALTHY:", await self.check_modbus_connection())
                 else:
                     await self.log(
                         "Unsupported device type %s" % type(device["device"]),
@@ -203,6 +214,23 @@ class ModbusWorker(ValkeyWorker):
                     % (task_id, result["data"].get("payload")),
                     level=logging.DEBUG,
                 )
+            elif data_type == DataTypes.MODBUS_CONNECTIONS_COUNT:
+                if result["data"].get("payload") > 0:
+                    await self.tasks.put(
+                        (uuid4(), {"task": Tasks.MODBUS_MONITOR, "timeout": 10.0})
+                    )
+            elif data_type == DataTypes.MODBUS_STATUS:
+                if result["data"].get("payload"):
+                    await self.tasks.put(
+                        (uuid4(), {"task": Tasks.MODBUS_MONITOR, "timeout": 10.0})
+                    )
+                else:
+                    await self.tasks.put(
+                        (uuid4(), {"task": Tasks.MODBUS_DISCONNECT, "timeout": 10.0})
+                    )
+                    await self.tasks.put(
+                        (uuid4(), {"task": Tasks.MODBUS_CONNECT, "timeout": 10.0})
+                    )
             elif data_type == DataTypes.DEVICE_DATA:
                 print(result["data"].get("payload"))
             else:
@@ -233,9 +261,26 @@ class ModbusWorker(ValkeyWorker):
             for port in self.vsn.external_ports:
                 if port.port == self.modbus_port.port:
                     self.vsn.remove([self.modbus_port.port])
+                    self.modbus_port = None
                     return 1
         self.modbus_port = None
         return 0
+
+    async def check_modbus_connection(self) -> bool:
+        if self.modbus_port is None or self.modbus_configuration is None:
+            return False
+        if self.modbus_port not in self.vsn.external_ports:
+            return False
+        ports = list_ports.comports()
+        port_exist = False
+        for port in ports:
+            if port.device == self.modbus_port.port:
+                port_exist = True
+                break
+        if not port_exist:
+            return False
+
+        return True
 
     async def connect_modbus(self) -> int:
         if self.modbus_port is None:
