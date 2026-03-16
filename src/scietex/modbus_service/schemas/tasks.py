@@ -1,0 +1,15 @@
+"""Tasks enums."""
+
+from enum import Enum
+
+
+class Tasks(Enum):
+    """Modbus worker tasks."""
+
+    CONFIGURATION_READ = "CONFIGURATION READ"
+    MODBUS_DISCONNECT = "MODBUS DISCONNECT"
+    MODBUS_CONNECT = "MODBUS CONNECT"
+    DEVICES_DISCONNECT = "DEVICES DISCONNECT"
+    DEVICES_CONNECT = "DEVICES CONNECT"
+
+    DEVICE_MONITOR = "DEVICE MONITOR"

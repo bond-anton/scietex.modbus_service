@@ -16,8 +16,13 @@
     "asyncio",
     "pythonpath",
     "Bondarenko",
-    "hgetall"
+    "hgetall",
+    "msgspec",
+    "baudrate",
+    "bytesize",
+    "stopbits",
+    "cyky"
   ],
-  "ignoreWords": [],
+  "ignoreWords": ["LICEN"],
   "import": []
 }
