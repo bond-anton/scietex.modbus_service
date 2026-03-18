@@ -64,4 +64,3 @@ class ModbusConfiguration(msgspec.Struct, frozen=True):
 
 
 encoder = msgspec.msgpack.Encoder()
-decoder = msgspec.msgpack.Decoder(ModbusConfiguration)
