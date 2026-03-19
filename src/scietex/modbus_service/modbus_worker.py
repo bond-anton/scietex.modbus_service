@@ -15,7 +15,6 @@ from scietex.service import ValkeyWorker
 from scietex.service.task_handlers import TaskData, TaskTimeout
 from scietex.hal.serial import (
     SerialConnectionConfig,
-    ModbusSerialConnectionConfig,
     VirtualSerialNetwork,
     RS485Client,
 )
@@ -31,7 +30,15 @@ from .handlers.connection import (
     ConnectModbusHandler,
     CheckModbusConnectionHandler,
 )
-from .handlers.devices import DisconnectDeviceHandler, DisconnectDevicesHandler
+from .handlers.devices import (
+    ConnectDeviceHandler,
+    ConnectDevicesHandler,
+    DisconnectDeviceHandler,
+    DisconnectDevicesHandler,
+    EnableDeviceHandler,
+    DisableDeviceHandler,
+    MonitorDeviceHandler,
+)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -43,7 +50,7 @@ class ModbusWorker(ValkeyWorker[Tasks]):
             service_name="modbus",
             version=__version__,
             queue_size=100,
-            max_concurrent_tasks=1,
+            max_concurrent_tasks=5,
             **kwargs,
         )
 
@@ -54,6 +61,8 @@ class ModbusWorker(ValkeyWorker[Tasks]):
             virtual_ports_num=0, logger=self.logger, loopback=False
         )
         self.encoder = msgspec.msgpack.Encoder()
+
+        self.modbus_locked: bool = False
 
     async def initialize(self) -> bool:
         if self.initialized:
@@ -73,6 +82,11 @@ class ModbusWorker(ValkeyWorker[Tasks]):
 
         self.register_task_handler(Tasks.DEVICE_DISCONNECT, DisconnectDeviceHandler)
         self.register_task_handler(Tasks.DEVICES_DISCONNECT, DisconnectDevicesHandler)
+        self.register_task_handler(Tasks.DEVICE_CONNECT, ConnectDeviceHandler)
+        self.register_task_handler(Tasks.DEVICES_CONNECT, ConnectDevicesHandler)
+        self.register_task_handler(Tasks.DEVICE_ENABLE, EnableDeviceHandler)
+        self.register_task_handler(Tasks.DEVICE_DISABLE, DisableDeviceHandler)
+        self.register_task_handler(Tasks.DEVICE_MONITOR, MonitorDeviceHandler)
 
         await self.schedule_configuration_read()
 
@@ -99,6 +113,15 @@ class ModbusWorker(ValkeyWorker[Tasks]):
 
     async def schedule_devices_disconnect(self):
         await self.task_queue.put((uuid4(), DisconnectDevicesHandler.generate_task()))
+
+    async def schedule_device_connect(self, device: ModbusDevice):
+        await self.task_queue.put((uuid4(), ConnectDeviceHandler.generate_task(device)))
+
+    async def schedule_devices_connect(self):
+        await self.task_queue.put((uuid4(), ConnectDevicesHandler.generate_task()))
+
+    async def schedule_device_monitor(self, device: ModbusDevice):
+        await self.task_queue.put((uuid4(), MonitorDeviceHandler.generate_task(device)))
 
     async def cleanup(self):
         """

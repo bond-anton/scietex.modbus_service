@@ -48,6 +48,7 @@ class ReadConfigurationHandler(TaskHandler):
         await self.worker.schedule_devices_disconnect()
         await self.worker.schedule_modbus_disconnect()
         await self.worker.schedule_modbus_connect()
+        await self.worker.schedule_devices_connect()
         return result
 
     async def try_to_read_configuration(self, task_data: TaskData) -> TaskResult:
