@@ -3,16 +3,13 @@
 import msgspec
 
 import asyncio
-import time
-import importlib
-from typing import Type, Any
+
 import logging
 from uuid import uuid4
 
-from scietex.hal.qcm.base.rs485 import RS485GatedFTM
 
 from scietex.service import ValkeyWorker
-from scietex.service.task_handlers import TaskData, TaskTimeout
+
 from scietex.hal.serial import (
     SerialConnectionConfig,
     VirtualSerialNetwork,
