@@ -62,7 +62,7 @@ class ModbusWorker(ValkeyWorker[Tasks]):
         )
         self.encoder = msgspec.msgpack.Encoder()
 
-        self.modbus_locked: bool = False
+        self.modbus_lock = asyncio.Lock()
 
     async def initialize(self) -> bool:
         if self.initialized:

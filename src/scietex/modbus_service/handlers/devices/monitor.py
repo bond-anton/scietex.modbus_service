@@ -1,7 +1,8 @@
 """Handler for monitoring the Modbus device."""
 
 import asyncio
-from typing import TYPE_CHECKING
+from collections.abc import Awaitable
+from typing import Callable, ParamSpec, TypeVar, TYPE_CHECKING
 import logging
 import msgspec
 
@@ -16,6 +17,16 @@ from .qcm import monitor_qcm_device
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
+
+
+P = ParamSpec("P")
+R = TypeVar("R")
+
+AsyncHandler = Callable[P, Awaitable[R]]
+
+monitor_handlers: dict[type, AsyncHandler[[RS485Client], bytes | None]] = {
+    RS485GatedFTM: monitor_qcm_device,
+}
 
 
 class MonitorDeviceHandler(TaskHandler):
@@ -61,17 +72,11 @@ class MonitorDeviceHandler(TaskHandler):
                 error=f"Device {device.name} not found",
             )
 
-        while not self.worker.modbus_locked:
-            self.worker.modbus_locked = True
-            await asyncio.sleep(0.05)
-            break
-
         data: bytes | None = None
         rs485_device = self.worker.devices[device.name]["device"]
         if isinstance(rs485_device, RS485Client):
-            data = await self.read_device_data(rs485_device)
-
-        self.worker.modbus_locked = False
+            async with self.worker.modbus_lock:
+                data = await self.read_device_data(rs485_device)
 
         if data == b"":
             await self.worker.log(
@@ -96,20 +101,29 @@ class MonitorDeviceHandler(TaskHandler):
 
         return result
 
+    def _find_monitor_handler(
+        self, cls: type
+    ) -> AsyncHandler[[RS485Client], bytes | None]:
+        """
+        Find the most specific handler for the given class.
+        Checks the class and its base classes in method resolution order (MRO).
+        """
+        for base in cls.__mro__:
+            if base in monitor_handlers:
+                return monitor_handlers[base]
+
+        raise LookupError(
+            f"No handler registered for {cls.__name__} or any of its base classes"
+        )
+
     async def read_device_data(self, device: RS485Client) -> bytes | None:
         """Read data from the device."""
-        if isinstance(device, RS485GatedFTM):
-            try:
-                return await monitor_qcm_device(device)
-            except RuntimeError as e:
-                await self.worker.log(
-                    f"Failed to get data from {device.label}: {e}",
-                    level=logging.ERROR,
-                )
-                return None
-        else:
+        try:
+            handler = self._find_monitor_handler(type(device))
+            return await handler(device)
+        except LookupError as e:
             await self.worker.log(
-                f"Device {device.label} is not a supported device type for monitoring.",
+                f"No monitor handler found for device type {type(device).__name__}: {e}",
                 level=logging.ERROR,
             )
             return None
@@ -131,111 +145,3 @@ class MonitorDeviceHandler(TaskHandler):
     def supports(self, task_type: str) -> bool:
         """Check if the handler supports the given task type."""
         return task_type == Tasks.DEVICE_MONITOR.value
-
-
-from functools import lru_cache
-from typing import Any, Callable, Type
-
-
-class DeviceManager:
-    def __init__(self):
-        # Registered handlers: base classes → handler functions
-        self._handlers: dict[Type, Callable[[Any], None]] = {}
-
-    def register(self, device_class: Type, handler: Callable[[Any], None]) -> None:
-        """
-        Register a handler for a device class (or base class).
-        Later concrete classes will automatically find the most specific match.
-        """
-        if not callable(handler):
-            raise TypeError("Handler must be callable")
-        self._handlers[device_class] = handler
-
-    @lru_cache(maxsize=512)  # or maxsize=None if you want unlimited
-    def _find_handler(self, cls: Type) -> Callable[[Any], None]:
-        """
-        Walk MRO to find the most specific registered handler.
-        Result is cached per concrete class → very fast after first lookup.
-        """
-        for base in cls.__mro__:
-            if base in self._handlers:
-                return self._handlers[base]
-
-        raise LookupError(
-            f"No handler registered for {cls.__name__} or any of its base classes"
-        )
-
-    def handle(self, device: Any) -> None:
-        """
-        Find + execute the best handler for this device instance.
-        """
-        concrete_cls = type(device)
-        handler = self._find_handler(concrete_cls)
-        handler(device)
-
-
-# ────────────────────────────────────────────────
-# Example usage / plugin style registration
-# ────────────────────────────────────────────────
-
-
-class USBDevice:
-    pass
-
-
-class BLEDevice:
-    pass
-
-
-class SerialDevice:
-    pass
-
-
-class CANDevice:
-    pass
-
-
-class J1939Device(SerialDevice):
-    pass  # inherits from SerialDevice
-
-
-manager = DeviceManager()
-
-# Register handlers (can be done in different modules / plugins)
-manager.register(USBDevice, lambda d: print(f"USB connect → {d}"))
-manager.register(BLEDevice, lambda d: print(f"BLE pair → {d}"))
-manager.register(SerialDevice, lambda d: print(f"Serial open 9600 baud → {d}"))
-manager.register(CANDevice, lambda d: print(f"CAN init 500kbit → {d}"))
-
-# Now use it
-usb = USBDevice()
-ble = BLEDevice()
-serial = SerialDevice()
-j1939 = J1939Device()  # ← should use SerialDevice handler
-can = CANDevice()
-
-manager.handle(usb)  # → USB connect ...
-manager.handle(ble)  # → BLE pair ...
-manager.handle(serial)  # → Serial open ...
-manager.handle(j1939)  # → Serial open ...  (uses most specific = SerialDevice)
-manager.handle(can)  # → CAN init ...
-
-
-from collections.abc import Awaitable
-from typing import ParamSpec, TypeVar
-
-P = ParamSpec("P")
-R = TypeVar("R")
-
-AsyncHandler = Callable[P, Awaitable[R]]
-
-
-async def process_order(order_id: int, items: list[str]) -> dict:
-    return {"status": "processed", "order_id": order_id}
-
-
-handler: AsyncHandler[[int, list[str]], dict] = process_order
-
-# or more generically in a registry
-handlers: dict[str, AsyncHandler[..., Any]] = {}
-handlers["process_order"] = process_order
