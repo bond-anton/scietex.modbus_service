@@ -8,9 +8,11 @@ from scietex.hal.serial import RS485Client
 encoder = msgspec.msgpack.Encoder()
 
 
-async def monitor_qcm_device(device: RS485Client[RS485GatedFTM]) -> bytes:
+async def monitor_qcm_device(device: RS485Client) -> bytes:
     """Monitor the QCM device and return its parameters."""
     try:
+        if not isinstance(device, RS485GatedFTM):
+            raise TypeError("device is not a subclass of RS485GatedFTM.")
         parameters: FTMParameters = await device.read_parameters()
         return encoder.encode(parameters)
     except Exception as e:
