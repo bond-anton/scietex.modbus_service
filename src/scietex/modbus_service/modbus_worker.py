@@ -1,41 +1,35 @@
 """Worker module for modbus service."""
 
-import msgspec
-
 import asyncio
-
 import logging
 from uuid import uuid4
 
-
-from scietex.service import ValkeyWorker
-
+import msgspec
 from scietex.hal.serial import (
+    RS485Client,
     SerialConnectionConfig,
     VirtualSerialNetwork,
-    RS485Client,
 )
-
-from .version import __version__
-
-from .schemas.configuration import ModbusConfiguration, ModbusDevice
-from .schemas.tasks import Tasks
+from scietex.service import ValkeyWorker
 
 from .handlers.configuration import ReadConfigurationHandler
 from .handlers.connection import (
-    DisconnectModbusHandler,
-    ConnectModbusHandler,
     CheckModbusConnectionHandler,
+    ConnectModbusHandler,
+    DisconnectModbusHandler,
 )
 from .handlers.devices import (
     ConnectDeviceHandler,
     ConnectDevicesHandler,
+    DisableDeviceHandler,
     DisconnectDeviceHandler,
     DisconnectDevicesHandler,
     EnableDeviceHandler,
-    DisableDeviceHandler,
     MonitorDeviceHandler,
 )
+from .schemas.configuration import ModbusConfiguration, ModbusDevice
+from .schemas.tasks import Tasks
+from .version import __version__
 
 
 # pylint: disable=too-many-instance-attributes
@@ -54,9 +48,7 @@ class ModbusWorker(ValkeyWorker[Tasks]):
         self.modbus_configuration: ModbusConfiguration | None = None
         self.modbus_port: SerialConnectionConfig | None = None
         self.devices: dict[str, dict[str, RS485Client | int | float | str]] = {}
-        self.vsn: VirtualSerialNetwork = VirtualSerialNetwork(
-            virtual_ports_num=0, logger=self.logger, loopback=False
-        )
+        self.vsn: VirtualSerialNetwork = VirtualSerialNetwork(virtual_ports_num=0, logger=self.logger, loopback=False)
         self.encoder = msgspec.msgpack.Encoder()
 
         self.modbus_lock = asyncio.Lock()
@@ -99,14 +91,10 @@ class ModbusWorker(ValkeyWorker[Tasks]):
         await self.task_queue.put((uuid4(), ConnectModbusHandler.generate_task()))
 
     async def schedule_modbus_monitor(self):
-        await self.task_queue.put(
-            (uuid4(), CheckModbusConnectionHandler.generate_task())
-        )
+        await self.task_queue.put((uuid4(), CheckModbusConnectionHandler.generate_task()))
 
     async def schedule_device_disconnect(self, device: ModbusDevice):
-        await self.task_queue.put(
-            (uuid4(), DisconnectDeviceHandler.generate_task(device))
-        )
+        await self.task_queue.put((uuid4(), DisconnectDeviceHandler.generate_task(device)))
 
     async def schedule_devices_disconnect(self):
         await self.task_queue.put((uuid4(), DisconnectDevicesHandler.generate_task()))

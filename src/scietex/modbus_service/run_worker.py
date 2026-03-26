@@ -1,8 +1,8 @@
 """script to run the worker"""
 
+import argparse
 import asyncio
 import sys
-import argparse
 from pathlib import Path
 
 from scietex.modbus_service import ModbusWorker
@@ -12,9 +12,7 @@ async def main_async(args) -> int:
     """Main function for modbus service."""
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--conf-dir", type=Path, help="Path to configuration directory (optional)"
-    )
+    parser.add_argument("--conf-dir", type=Path, help="Path to configuration directory (optional)")
     parser.add_argument(
         "--worker-id",
         type=int,
@@ -34,9 +32,7 @@ async def main_async(args) -> int:
             print(f"Error: {parsed_args.conf_dir} is not a directory!")
             return 1
 
-    modbus_service = ModbusWorker(
-        config_dir=parsed_args.conf_dir, worker_id=parsed_args.worker_id
-    )
+    modbus_service = ModbusWorker(config_dir=parsed_args.conf_dir, worker_id=parsed_args.worker_id)
     await modbus_service.run()
     return 0
 

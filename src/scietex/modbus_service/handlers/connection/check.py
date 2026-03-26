@@ -1,14 +1,15 @@
 """Handler for monitoring Modbus serial port connection."""
 
-from typing import TYPE_CHECKING
 import asyncio
 import logging
-import msgspec
+from typing import TYPE_CHECKING
 
+import msgspec
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
 from serial.tools import list_ports
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
+
 from ...schemas.results import StatusResult
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker

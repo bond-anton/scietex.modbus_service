@@ -1,14 +1,14 @@
 """Handler for disabling Modbus devices."""
 
 import asyncio
-from typing import TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING
+
 import msgspec
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
 
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
 from ...schemas.configuration import ModbusDevice
-
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
@@ -54,9 +54,7 @@ class DisableDeviceHandler(TaskHandler):
             if device.name in self.worker.devices:
                 self.worker.devices[device.name]["enabled"] = False
                 await asyncio.sleep(0.1)
-                await self.worker.log(
-                    f"Disabled Modbus Device {device.name}", level=logging.INFO
-                )
+                await self.worker.log(f"Disabled Modbus Device {device.name}", level=logging.INFO)
                 return TaskResult(
                     status="success",
                     error="No error",

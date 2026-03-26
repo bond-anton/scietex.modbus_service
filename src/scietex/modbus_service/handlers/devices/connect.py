@@ -1,15 +1,16 @@
 """Handler for connecting Modbus devices."""
 
 import asyncio
-from typing import TYPE_CHECKING
 import logging
-import msgspec
+from typing import TYPE_CHECKING
 
-from scietex.hal.serial import RS485Client, ModbusSerialConnectionConfig
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
-from ...schemas.results import CountResult
+import msgspec
+from scietex.hal.serial import ModbusSerialConnectionConfig, RS485Client
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
+
 from ...schemas.configuration import ModbusDevice
+from ...schemas.results import CountResult
+from ...schemas.tasks import Tasks
 from .drivers import get_driver
 
 if TYPE_CHECKING:
@@ -83,9 +84,7 @@ class ConnectDeviceHandler(TaskHandler):
 
         ports = self.worker.vsn.create(1)
         if not ports:
-            await self.worker.log(
-                "Can not create VSN port for modbus device", level=logging.ERROR
-            )
+            await self.worker.log("Can not create VSN port for modbus device", level=logging.ERROR)
             return 0
         print("=== Connecting to port", ports[0])
         modbus_config = ModbusSerialConnectionConfig(
@@ -109,9 +108,7 @@ class ConnectDeviceHandler(TaskHandler):
             )
             return 0
         try:
-            client: RS485Client = driver(
-                modbus_config, address=device.address, label=device.name
-            )
+            client: RS485Client = driver(modbus_config, address=device.address, label=device.name)
             self.worker.devices[device.name] = {
                 "device_type": device.modbus_device_driver.device_type.name,
                 "device": client,
@@ -123,9 +120,7 @@ class ConnectDeviceHandler(TaskHandler):
                 f"Connected to modbus device {device.name} successfully.",
                 level=logging.INFO,
             )
-            await asyncio.sleep(
-                0.1
-            )  # Small delay to ensure the device is properly initialized
+            await asyncio.sleep(0.1)  # Small delay to ensure the device is properly initialized
             await self.worker.schedule_device_monitor(device)
             return 1
         except Exception as e:

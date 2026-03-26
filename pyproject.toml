@@ -17,7 +17,7 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
   "msgspec>=0.20.0",
-  "scietex.service[valkey]>=1.0.1",
+  "scietex.service[valkey]>=1.0.3",
   "scietex.hal.serial>=1.3.0",
   "scietex.hal.qcm>=1.1.2",
 ]
@@ -27,9 +27,9 @@ dependencies = [
 "Bug Tracker" = "https://github.com/bond-anton/scietex.modbus_service/issues"
 
 [project.optional-dependencies]
-dev = ["tox", "valkey-glide>=2.2.0"]
-test = ["flake8", "pytest", "pytest-asyncio"]
-lint = ["pylint"]
+dev = ["tox>=4.45.0", "valkey-glide>=2.2.0"]
+test = ["pytest", "pytest-asyncio"]
+lint = ["ruff"]
 
 [project.scripts]
 start-modbus-service = "scietex.modbus_service.run_worker:main"
@@ -42,9 +42,6 @@ version = { attr = "scietex.modbus_service.version.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.mypy]
-python_version = "3.10"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

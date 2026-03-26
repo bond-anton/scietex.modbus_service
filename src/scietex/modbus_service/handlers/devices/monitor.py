@@ -1,19 +1,18 @@
 """Handler for monitoring the Modbus device."""
 
 import asyncio
-from collections.abc import Awaitable
-from typing import Callable, ParamSpec, TypeVar, TYPE_CHECKING
 import logging
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
+
 import msgspec
-
-from scietex.hal.serial import RS485Client
 from scietex.hal.qcm.base.rs485 import RS485GatedFTM
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
+from scietex.hal.serial import RS485Client
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
+
 from ...schemas.configuration import ModbusDevice
-
+from ...schemas.tasks import Tasks
 from .qcm import monitor_qcm_device
-
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
@@ -101,9 +100,7 @@ class MonitorDeviceHandler(TaskHandler):
 
         return result
 
-    def _find_monitor_handler(
-        self, cls: type
-    ) -> AsyncHandler[[RS485Client], bytes | None]:
+    def _find_monitor_handler(self, cls: type) -> AsyncHandler[[RS485Client], bytes | None]:
         """
         Find the most specific handler for the given class.
         Checks the class and its base classes in method resolution order (MRO).
@@ -112,9 +109,7 @@ class MonitorDeviceHandler(TaskHandler):
             if base in monitor_handlers:
                 return monitor_handlers[base]
 
-        raise LookupError(
-            f"No handler registered for {cls.__name__} or any of its base classes"
-        )
+        raise LookupError(f"No handler registered for {cls.__name__} or any of its base classes")
 
     async def read_device_data(self, device: RS485Client) -> bytes | None:
         """Read data from the device."""
@@ -128,9 +123,7 @@ class MonitorDeviceHandler(TaskHandler):
             )
             return None
 
-    async def error_decoding_device_info(
-        self, e: Exception | None = None
-    ) -> TaskResult:
+    async def error_decoding_device_info(self, e: Exception | None = None) -> TaskResult:
         """Handle error when decoding device information."""
         error = f": {e}" if e else "."
         await self.worker.log(

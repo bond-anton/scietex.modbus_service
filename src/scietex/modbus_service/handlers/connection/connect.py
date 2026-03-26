@@ -1,15 +1,16 @@
 """Handler for connecting Modbus serial port."""
 
-from typing import TYPE_CHECKING
 import asyncio
 import logging
-import msgspec
+from typing import TYPE_CHECKING
 
+import msgspec
 from scietex.hal.serial import SerialConnectionConfig
 from scietex.hal.serial.utilities.serial_port_finder import find_serial_ports
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
+
 from ...schemas.results import CountResult
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
@@ -44,9 +45,7 @@ class ConnectModbusHandler(TaskHandler):
             await asyncio.sleep(2)  # wait before retrying to connect Modbus
             await self.worker.schedule_modbus_connect()
             return result
-        await (
-            self.worker.schedule_modbus_monitor()
-        )  # Schedule the monitor task after successful connection
+        await self.worker.schedule_modbus_monitor()  # Schedule the monitor task after successful connection
         return result
 
     async def try_to_connect_modbus(self, task_data: TaskData) -> TaskResult:
@@ -85,48 +84,54 @@ class ConnectModbusHandler(TaskHandler):
         if not isinstance(self.worker, ModbusWorker):
             return 0
 
-        if self.worker.modbus_port is None:
-            if self.worker.modbus_configuration:
-                modbus_port = self.worker.modbus_configuration.serial_port_config.port
-                usb_match = False
-                if self.worker.modbus_configuration.serial_port_config.usb_device:
-                    ports = find_serial_ports(
-                        {
-                            self.worker.modbus_configuration.serial_port_config.usb_device.vendor_id: [
-                                self.worker.modbus_configuration.serial_port_config.usb_device.product_id
-                            ]
-                        }
-                    )
-                    if modbus_port:
-                        for port in ports:
-                            if port == modbus_port:
-                                usb_match = True
-                                break
-                    elif ports:
-                        modbus_port = ports[0]
-                        usb_match = True
-                else:
+        if self.worker.modbus_port is not None:
+            await self.worker.log(
+                "Already connected to serial port",
+                level=logging.DEBUG,
+            )
+            return 1
+
+        if self.worker.modbus_configuration:
+            modbus_port = self.worker.modbus_configuration.serial_port_config.port
+            usb_match = False
+            if self.worker.modbus_configuration.serial_port_config.usb_device:
+                ports = find_serial_ports(
+                    {
+                        self.worker.modbus_configuration.serial_port_config.usb_device.vendor_id: [
+                            self.worker.modbus_configuration.serial_port_config.usb_device.product_id
+                        ]
+                    }
+                )
+                if modbus_port:
+                    for port in ports:
+                        if port == modbus_port:
+                            usb_match = True
+                            break
+                elif ports:
+                    modbus_port = ports[0]
                     usb_match = True
-                if modbus_port and usb_match:
-                    self.worker.modbus_port = SerialConnectionConfig(
-                        port=modbus_port,
-                        baudrate=self.worker.modbus_configuration.serial_port_config.baudrate,
-                        bytesize=self.worker.modbus_configuration.serial_port_config.bytesize,
-                        parity=self.worker.modbus_configuration.serial_port_config.parity,
-                        stopbits=self.worker.modbus_configuration.serial_port_config.stopbits,
-                        timeout=self.worker.modbus_configuration.serial_port_config.timeout,
-                    )
-                    self.worker.vsn.add([self.worker.modbus_port])
-                    for port in self.worker.vsn.external_ports:
-                        if self.worker.modbus_port.port == port.port:
-                            print("==========================")
-                            print("Connected MODBUS to PORT")
-                            print(
-                                self.worker.vsn.serial_ports,
-                                self.worker.vsn.external_ports,
-                            )
-                            print("==========================")
-                            return 1
+            else:
+                usb_match = True
+            if modbus_port and usb_match:
+                self.worker.modbus_port = SerialConnectionConfig(
+                    port=modbus_port,
+                    baudrate=self.worker.modbus_configuration.serial_port_config.baudrate,
+                    bytesize=self.worker.modbus_configuration.serial_port_config.bytesize,
+                    parity=self.worker.modbus_configuration.serial_port_config.parity,
+                    stopbits=self.worker.modbus_configuration.serial_port_config.stopbits,
+                    timeout=self.worker.modbus_configuration.serial_port_config.timeout,
+                )
+                self.worker.vsn.add([self.worker.modbus_port])
+                for port in self.worker.vsn.external_ports:
+                    if self.worker.modbus_port.port == port.port:
+                        print("==========================")
+                        print("Connected MODBUS to PORT")
+                        print(
+                            self.worker.vsn.serial_ports,
+                            self.worker.vsn.external_ports,
+                        )
+                        print("==========================")
+                        return 1
         return 0
 
     def supports(self, task_type: str) -> bool:

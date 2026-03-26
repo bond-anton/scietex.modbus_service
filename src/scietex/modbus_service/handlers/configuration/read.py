@@ -1,13 +1,14 @@
 """Handler for reading Modbus configuration from Valkey."""
 
-from typing import TYPE_CHECKING
 import asyncio
 import logging
-import msgspec
+from typing import TYPE_CHECKING
 
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
+import msgspec
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
+
 from ...schemas.configuration import ModbusConfiguration
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
@@ -21,10 +22,7 @@ class ReadConfigurationHandler(TaskHandler):
         super().__init__(worker)
         self._is_initialized = True
         self.decoder = msgspec.msgpack.Decoder(ModbusConfiguration)
-        self.conf_key = (
-            "scietex:configuration:"
-            + f"{self.worker.service_name}:{self.worker.worker_id}"
-        )
+        self.conf_key = "scietex:configuration:" + f"{self.worker.service_name}:{self.worker.worker_id}"
 
     @classmethod
     def generate_task(self) -> TaskData:
@@ -75,13 +73,9 @@ class ReadConfigurationHandler(TaskHandler):
         try:
             modbus_configuration = self.decoder.decode(configuration_encoded)
             if self.worker.modbus_configuration != modbus_configuration:
-                await self.worker.log(
-                    "We have a new Configuration here. UPDATING", level=logging.INFO
-                )
+                await self.worker.log("We have a new Configuration here. UPDATING", level=logging.INFO)
                 self.worker.modbus_configuration = modbus_configuration
-            return TaskResult(
-                status="success", error="No error", payload=configuration_encoded
-            )
+            return TaskResult(status="success", error="No error", payload=configuration_encoded)
         except Exception as e:
             return TaskResult(
                 status="error",

@@ -1,8 +1,8 @@
 """Handler for managing Modbus serial port connections."""
 
+from .check import CheckModbusConnectionHandler
 from .connect import ConnectModbusHandler
 from .disconnect import DisconnectModbusHandler
-from .check import CheckModbusConnectionHandler
 
 __all__ = [
     "ConnectModbusHandler",

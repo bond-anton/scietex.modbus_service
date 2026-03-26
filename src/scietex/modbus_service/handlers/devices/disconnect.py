@@ -1,16 +1,16 @@
 """Handler for disconnecting Modbus devices."""
 
 import asyncio
-from typing import TYPE_CHECKING
 import logging
+from typing import TYPE_CHECKING
+
 import msgspec
-
 from scietex.hal.serial import RS485Client
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
-from ...schemas.results import CountResult
-from ...schemas.configuration import ModbusDevice
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
 
+from ...schemas.configuration import ModbusDevice
+from ...schemas.results import CountResult
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker
@@ -56,9 +56,7 @@ class DisconnectDeviceHandler(TaskHandler):
             if device.name in self.worker.devices:
                 self.worker.devices[device.name]["enabled"] = False
                 await asyncio.sleep(0.1)
-                await self.worker.log(
-                    f"Disconnecting Modbus Device {device.name}", level=logging.INFO
-                )
+                await self.worker.log(f"Disconnecting Modbus Device {device.name}", level=logging.INFO)
                 device_instance = self.worker.devices[device.name].get("device")
                 if device_instance and isinstance(device_instance, RS485Client):
                     self.worker.vsn.remove([device_instance.con_params.port])
@@ -139,12 +137,10 @@ class DisconnectDevicesHandler(TaskHandler):
         if self.worker.devices:
             for device_name in self.worker.devices:
                 scheduled = False
-                if (
-                    self.worker.modbus_configuration
-                ):  # Check if modbus_configuration is available
-                    for device in (
-                        self.worker.modbus_configuration.devices
-                    ):  # Check if the device is in the modbus_configuration
+                if self.worker.modbus_configuration:  # Check if modbus_configuration is available
+                    for (
+                        device
+                    ) in self.worker.modbus_configuration.devices:  # Check if the device is in the modbus_configuration
                         if (
                             device.name == device_name
                         ):  # If the device is in the modbus_configuration, schedule the disconnect task
@@ -155,9 +151,7 @@ class DisconnectDevicesHandler(TaskHandler):
                 if not scheduled:  # If the device is not in the modbus_configuration, disconnect it directly
                     self.worker.devices[device_name]["enabled"] = False
                     await asyncio.sleep(1)
-                    await self.worker.log(
-                        f"Disconnecting Modbus Device {device_name}", level=logging.INFO
-                    )
+                    await self.worker.log(f"Disconnecting Modbus Device {device_name}", level=logging.INFO)
                     device = self.worker.devices[device_name].get("device")
                     if device and isinstance(device, RS485Client):
                         self.worker.vsn.remove([device.con_params.port])

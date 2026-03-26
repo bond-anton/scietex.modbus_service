@@ -1,12 +1,13 @@
 """Handler for disconnecting Modbus serial port."""
 
-from typing import TYPE_CHECKING
 import logging
-import msgspec
+from typing import TYPE_CHECKING
 
-from scietex.service.task_handlers import TaskHandler, TaskData, TaskResult, TaskTimeout
-from ...schemas.tasks import Tasks
+import msgspec
+from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
+
 from ...schemas.results import CountResult
+from ...schemas.tasks import Tasks
 
 if TYPE_CHECKING:
     from ...modbus_worker import ModbusWorker

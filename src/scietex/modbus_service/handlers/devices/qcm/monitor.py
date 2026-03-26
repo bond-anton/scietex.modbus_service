@@ -1,11 +1,9 @@
 """QCM Monitoring Handler for Modbus Service."""
 
-from scietex.hal.serial import RS485Client
-from scietex.hal.qcm.base.rs485 import RS485GatedFTM
-from scietex.hal.qcm.base.data import FTMParameters
-
 import msgspec
-
+from scietex.hal.qcm.base.data import FTMParameters
+from scietex.hal.qcm.base.rs485 import RS485GatedFTM
+from scietex.hal.serial import RS485Client
 
 encoder = msgspec.msgpack.Encoder()
 
