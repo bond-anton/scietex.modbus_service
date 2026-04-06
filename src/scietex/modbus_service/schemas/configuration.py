@@ -49,6 +49,7 @@ class ModbusDevice(msgspec.Struct, frozen=True):
     name: str
     address: int
     polling_interval: int
+    stream_length: int
     description: str | None
     modbus_device_driver: ModbusDeviceDriver
 

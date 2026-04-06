@@ -1,11 +1,16 @@
 """Handler for monitoring the Modbus device."""
 
+from ast import Str
+
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
+from glide import StreamAddOptions, TrimByMaxLen
 import msgspec
+
+
 from scietex.hal.qcm.base.rs485 import RS485GatedFTM
 from scietex.hal.serial import RS485Client
 from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
@@ -93,6 +98,14 @@ class MonitorDeviceHandler(TaskHandler):
                 error="No error",
                 payload=data,
             )
+            if self.worker.client:
+                await self.worker.client.xadd(
+                    f"scietex:{self.worker.service_name}:{self.worker.worker_id}:dev:{device.address:03d}",
+                    [(b"data", data)],
+                    options=StreamAddOptions(
+                        make_stream=True, trim=TrimByMaxLen(exact=False, threshold=device.stream_length, limit=None)
+                    ),
+                )
 
         if self.worker.devices[device.name]["enabled"]:
             await asyncio.sleep(device.polling_interval)

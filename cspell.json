@@ -21,7 +21,8 @@
     "baudrate",
     "bytesize",
     "stopbits",
-    "cyky"
+    "cyky",
+    "xadd"
   ],
   "ignoreWords": ["LICEN"],
   "import": []
