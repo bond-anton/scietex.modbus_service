@@ -1,16 +1,13 @@
 """Handler for monitoring the Modbus device."""
 
-from ast import Str
 
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
-from glide import StreamAddOptions, TrimByMaxLen
 import msgspec
-
-
+from glide import StreamAddOptions, TrimByMaxLen
 from scietex.hal.qcm.base.rs485 import RS485GatedFTM
 from scietex.hal.serial import RS485Client
 from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
