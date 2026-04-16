@@ -1,6 +1,5 @@
 """Handler for monitoring the Modbus device."""
 
-
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
@@ -54,6 +53,8 @@ class MonitorDeviceHandler(TaskHandler):
         """Monitor Modbus device."""
         from ...modbus_worker import ModbusWorker
 
+        print("\n\nXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX")
+
         if not isinstance(self.worker, ModbusWorker):
             return TaskResult(
                 status="error",
@@ -67,6 +68,8 @@ class MonitorDeviceHandler(TaskHandler):
         except Exception as e:
             return await self.error_decoding_device_info(e)
 
+        print(f"Device {device.name} enabled: {self.worker.devices[device.name]['enabled']}")
+
         if device.name not in self.worker.devices:
             return TaskResult(
                 status="error",
@@ -75,6 +78,7 @@ class MonitorDeviceHandler(TaskHandler):
 
         data: bytes | None = None
         rs485_device = self.worker.devices[device.name]["device"]
+        print("RS485 device:", rs485_device)
         if isinstance(rs485_device, RS485Client):
             async with self.worker.modbus_lock:
                 data = await self.read_device_data(rs485_device)
@@ -90,6 +94,7 @@ class MonitorDeviceHandler(TaskHandler):
                 payload=data,
             )
         elif data is not None:
+            print(f"\n\nReceived data from {device.name}: {data}\n\n")
             result = TaskResult(
                 status="success",
                 error="No error",

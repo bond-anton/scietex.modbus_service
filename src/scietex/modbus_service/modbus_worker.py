@@ -54,12 +54,15 @@ class ModbusWorker(ValkeyWorker[Tasks]):
         self.modbus_lock = asyncio.Lock()
 
     async def initialize(self) -> bool:
+
         if self.initialized:
             await self.log("Already initialized", level=logging.DEBUG)
             return True
 
         if not await super().initialize():
             return False
+
+        await self.purge_tasks()
 
         self.vsn.start()
 

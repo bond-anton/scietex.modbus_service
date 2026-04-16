@@ -120,7 +120,7 @@ class ConnectDeviceHandler(TaskHandler):
                 f"Connected to modbus device {device.name} successfully.",
                 level=logging.INFO,
             )
-            await asyncio.sleep(0.1)  # Small delay to ensure the device is properly initialized
+            await asyncio.sleep(0.25)  # Small delay to ensure the device is properly initialized
             await self.worker.schedule_device_monitor(device)
             return 1
         except Exception as e:

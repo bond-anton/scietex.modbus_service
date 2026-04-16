@@ -27,7 +27,7 @@ dependencies = [
 "Bug Tracker" = "https://github.com/bond-anton/scietex.modbus_service/issues"
 
 [project.optional-dependencies]
-dev = ["tox>=4.45.0", "valkey-glide>=2.2.0"]
+dev = ["tox>=4.45.0"]
 test = ["pytest", "pytest-asyncio"]
 lint = ["ruff"]
 
