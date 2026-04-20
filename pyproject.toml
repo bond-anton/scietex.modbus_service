@@ -17,9 +17,10 @@ classifiers = [
 requires-python = ">=3.10"
 dependencies = [
   "msgspec>=0.20.0",
-  "scietex.service[valkey]>=1.0.6",
+  "scietex.service[valkey]>=1.0.7",
   "scietex.hal.serial>=1.3.0",
-  "scietex.hal.qcm>=1.1.2",
+  "scietex.hal.qcm>=1.2.0",
+  "scietex.hal.adc>=0.0.1",
 ]
 
 [project.urls]

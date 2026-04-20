@@ -41,7 +41,7 @@ class ModbusWorker(ValkeyWorker[Tasks]):
             service_name="modbus",
             version=__version__,
             queue_size=100,
-            max_concurrent_tasks=5,
+            max_concurrent_tasks=20,
             **kwargs,
         )
 
@@ -79,6 +79,16 @@ class ModbusWorker(ValkeyWorker[Tasks]):
         self.register_task_handler(Tasks.DEVICE_ENABLE, EnableDeviceHandler)
         self.register_task_handler(Tasks.DEVICE_DISABLE, DisableDeviceHandler)
         self.register_task_handler(Tasks.DEVICE_MONITOR, MonitorDeviceHandler)
+
+        # if self.client:
+        #     res = await self.client.xreadgroup(
+        #         {self._task_stream_name: ">"},
+        #         self._task_group_name,
+        #         self._consumer_name,
+        #         # StreamReadGroupOptions(count=100, block_ms=1000),
+        #     )
+
+        # print("  TASKS IN STREAM", res)
 
         await self.schedule_configuration_read()
 

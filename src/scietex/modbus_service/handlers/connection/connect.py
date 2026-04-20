@@ -45,6 +45,7 @@ class ConnectModbusHandler(TaskHandler):
             await asyncio.sleep(2)  # wait before retrying to connect Modbus
             await self.worker.schedule_modbus_connect()
             return result
+        await self.worker.schedule_devices_connect()
         await self.worker.schedule_modbus_monitor()  # Schedule the monitor task after successful connection
         return result
 

@@ -3,16 +3,19 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import msgspec
 from glide import StreamAddOptions, TrimByMaxLen
+from scietex.hal.adc.base.rs485 import RS485ADC
 from scietex.hal.qcm.base.rs485 import RS485GatedFTM
 from scietex.hal.serial import RS485Client
 from scietex.service.task_handlers import TaskData, TaskHandler, TaskResult, TaskTimeout
 
 from ...schemas.configuration import ModbusDevice
 from ...schemas.tasks import Tasks
+from .adc import monitor_adc_device
 from .qcm import monitor_qcm_device
 
 if TYPE_CHECKING:
@@ -26,6 +29,7 @@ AsyncHandler = Callable[P, Awaitable[R]]
 
 monitor_handlers: dict[type, AsyncHandler[[RS485Client], bytes | None]] = {
     RS485GatedFTM: monitor_qcm_device,
+    RS485ADC: monitor_adc_device,
 }
 
 
@@ -44,7 +48,7 @@ class MonitorDeviceHandler(TaskHandler):
         """Generate a task to monitor Modbus device."""
         return TaskData(
             task=Tasks.DEVICE_MONITOR.value,
-            timeout=TaskTimeout(1, "requeue"),
+            timeout=TaskTimeout(5 + device.polling_interval / 1000, "requeue"),
             canceled_action="discard",
             payload=msgspec.msgpack.encode(device),
         )
@@ -69,6 +73,9 @@ class MonitorDeviceHandler(TaskHandler):
             return await self.error_decoding_device_info(e)
 
         print(f"Device {device.name} enabled: {self.worker.devices[device.name]['enabled']}")
+        print(f"Device polling interval: {device.polling_interval} ms")
+        print(f"Task timeout: {task_data.timeout} seconds")
+        # await asyncio.sleep(device.polling_interval / 1000)  # Convert ms to seconds
 
         if device.name not in self.worker.devices:
             return TaskResult(
@@ -81,7 +88,8 @@ class MonitorDeviceHandler(TaskHandler):
         print("RS485 device:", rs485_device)
         if isinstance(rs485_device, RS485Client):
             async with self.worker.modbus_lock:
-                data = await self.read_device_data(rs485_device)
+                data = await asyncio.wait_for(self.read_device_data(rs485_device), timeout=1.0)
+                # data = await self.read_device_data(rs485_device)
 
         if data == b"":
             await self.worker.log(
@@ -101,16 +109,21 @@ class MonitorDeviceHandler(TaskHandler):
                 payload=data,
             )
             if self.worker.client:
-                await self.worker.client.xadd(
-                    f"scietex:{self.worker.service_name}:{self.worker.worker_id}:dev:{device.address:03d}",
-                    [(b"data", data)],
-                    options=StreamAddOptions(
-                        make_stream=True, trim=TrimByMaxLen(exact=False, threshold=device.stream_length, limit=None)
-                    ),
-                )
+                try:
+                    await self.worker.client.xadd(
+                        f"scietex:{self.worker.service_name}:{self.worker.worker_id}:dev:{device.address:03d}",
+                        [(b"data", data), (b"timestamp", datetime.now(timezone.utc).isoformat().encode())],
+                        options=StreamAddOptions(
+                            make_stream=True, trim=TrimByMaxLen(exact=False, threshold=device.stream_length, limit=None)
+                        ),
+                    )
+                except Exception as e:
+                    await self.worker.log(
+                        f"Failed to add data to stream for {device.name}: {e}",
+                        level=logging.ERROR,
+                    )
 
         if self.worker.devices[device.name]["enabled"]:
-            await asyncio.sleep(device.polling_interval)
             await self.worker.schedule_device_monitor(device)
 
         return result

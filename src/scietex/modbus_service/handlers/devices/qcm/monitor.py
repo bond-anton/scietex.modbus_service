@@ -14,6 +14,9 @@ async def monitor_qcm_device(device: RS485Client) -> bytes:
         if not isinstance(device, RS485GatedFTM):
             raise TypeError("device is not a subclass of RS485GatedFTM.")
         parameters: FTMParameters = await device.read_parameters()
+        print(f"Read parameters from QCM device: {parameters}")
         return encoder.encode(parameters)
     except Exception as e:
-        raise RuntimeError(f"Failed to monitor QCM device: {e}")
+        raise RuntimeError(
+            f"Failed to monitor QCM device: {e}. Parameters: {parameters if 'parameters' in locals() else 'N/A'}"
+        ) from e
