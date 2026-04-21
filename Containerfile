@@ -1,6 +1,6 @@
 # Stage 1: Build Python dependencies
-# Set the base image using Python 3.12 and Debian Bookworm
-FROM python:3.12-slim-bookworm  as builder
+# Set the base image using Python 3.13 and Debian Bookworm
+FROM python:3.13-slim-bookworm  as builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir -U pip && \
     pip install --no-cache-dir .  # Installs your project in editable mode
 
 # Stage 2: Runtime image
-FROM python:3.12-slim-bookworm
+FROM python:3.13-slim-bookworm
 
 WORKDIR /app
 
