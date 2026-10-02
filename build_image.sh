@@ -4,7 +4,6 @@
 get_version() {
     local version_file="src/scietex/modbus_service/version.py"
     local version
-    local python_output
 
     # Check if file exists
     if [ ! -f "$version_file" ]; then
@@ -12,9 +11,10 @@ get_version() {
         return 1
     fi
 
-    # Extract version
-    python_output=$(python3 -c "from src.scietex.modbus_service.version import __version__; print(__version__)" 2>/dev/null)
-    version="$python_output"
+    # Extract version by parsing the source directly. Importing the module would
+    # execute the package __init__, which pulls in runtime dependencies (msgspec)
+    # that are not installed for the system interpreter running this script.
+    version=$(sed -n 's/^__version__[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$version_file" | head -n1)
 
     # Validate version is not empty
     if [ -z "$version" ]; then
@@ -37,17 +37,13 @@ main() {
     local version
     local image="registry.buro-nts.ru/scietex-modbus-service"
     local temp_manifest="${image}:build-temp"
-    local push_latest=true
+    local push_latest=false
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
             --latest)
                 push_latest=true
-                shift
-                ;;
-            --no-latest)
-                push_latest=false
                 shift
                 ;;
             *)
