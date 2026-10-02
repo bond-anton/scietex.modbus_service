@@ -22,7 +22,16 @@
     "bytesize",
     "stopbits",
     "cyky",
-    "xadd"
+    "xadd",
+    "pdus",
+    "Containerfile",
+    "appuser",
+    "dialout",
+    "buro",
+    "healthcheck",
+    "addopts",
+    "pyproject",
+    "monkeypatches"
   ],
   "ignoreWords": ["LICEN"],
   "import": []

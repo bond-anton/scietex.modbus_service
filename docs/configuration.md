@@ -1,0 +1,142 @@
+# Configuration
+
+The service reads its bootstrap settings from `modbus.yml`, a YAML file in a
+`modbus/` subdirectory of the config directory. The file is decoded with
+`msgspec.yaml` into a frozen struct with `forbid_unknown_fields=True`, so a typo
+in a field name is a hard error, not a silently ignored key.
+
+## Config directory resolution
+
+The config directory is resolved once, at worker construction, by the framework's
+`prepare_conf_dir`. The first **existing** directory wins:
+
+1. The `--conf-dir` CLI argument
+2. `SCIETEX_CONFIG_DIR`
+3. `$XDG_CONFIG_HOME/scietex`
+4. `~/.config/scietex`
+5. `/etc/scietex`
+6. `/usr/local/etc/scietex`
+7. `./config` (current working directory)
+8. `~/.config/scietex` — **created** if none of the above exist
+
+Only step 8 creates a directory; steps 1–7 require the directory to already
+exist. A set-but-nonexistent `SCIETEX_CONFIG_DIR` is silently skipped, so in a
+container always create the directory before the worker starts.
+
+## File layout
+
+The service namespaces its files under a `modbus/` subdirectory so that multiple
+`scietex.*` services sharing one config directory cannot collide:
+
+```
+<conf_dir>/
+└── modbus/
+    ├── modbus.yml     # service-owned bootstrap (this page)
+    └── config.yml     # framework snapshot (remote config; see remote-config.md)
+```
+
+`MODBUS_CONFIG_SUBDIR` in `config.py` is the single source of truth for the
+subdirectory name.
+
+## `modbus.yml` schema
+
+```yaml
+serial:
+  port: /dev/ttyUSB0
+  baudrate: 9600
+  bytesize: 8
+  parity: N
+  stopbits: 1
+  timeout: null
+host: 0.0.0.0
+port: 502
+default_framer: RTU
+devices:
+  1:
+    framer: RTU
+  2:
+    framer: ASCII
+allow_unknown_devices: false
+bus_retries: 0
+```
+
+### Top-level fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `serial` | mapping | see below | Serial bus connection settings |
+| `host` | string | `0.0.0.0` | TCP bind address |
+| `port` | int | `502` | **TCP listen port** (not the serial port) |
+| `default_framer` | string | `RTU` | Framer for devices without an explicit entry |
+| `devices` | mapping | `{}` | Per-device routing table, keyed by device id |
+| `allow_unknown_devices` | bool | `false` | Route unknown ids with the default framer |
+| `bus_retries` | int | `0` | Retry count for bus transactions |
+
+> **`port` vs `serial.port`.** The top-level `port` is the TCP listen port;
+> `serial.port` is the serial device path. They are unrelated and must not be
+> conflated.
+
+### `serial` fields
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `port` | string | `/dev/ttyUSB0` | Serial device path |
+| `baudrate` | int | `9600` | Bus baud rate |
+| `bytesize` | int | `8` | Data bits: `5`, `6`, `7`, or `8` |
+| `parity` | string | `N` | Parity: `N` (none), `E` (even), or `O` (odd) |
+| `stopbits` | int or float | `1` | Stop bits: `1`, `1.5`, or `2` |
+| `timeout` | float or null | `null` | Read timeout in seconds |
+
+There is deliberately **no `framer` field** on the serial connection. The
+gateway selects framing per device from `default_framer` and each device's own
+`framer`; a serial-level framer would be dead configuration.
+
+### `devices` entries
+
+Each key is a Modbus device id (1–247). The key becomes the device's `device_id`
+when the settings are converted to the gateway's routing table, so the key and
+the device id can never disagree.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `framer` | string | `RTU` | `RTU`, `ASCII`, or a dotted path to a custom framer |
+| `decoder` | string or null | `null` | Dotted path to a custom decoder |
+| `pdus` | list of strings | `[]` | Dotted paths to custom PDU classes to register |
+| `translator` | string or null | `null` | Dotted path to a `GatewayTranslator`, or null for pass-through |
+
+All plugin references (framer, decoder, pdu, translator) are resolved at
+construction time, so a bad dotted path fails fast at startup rather than at the
+first request.
+
+## Settings precedence
+
+Effective settings are resolved in this order, later sources winning:
+
+```
+constructor default  <  modbus.yml  <  framework config.yml / remote modbus section
+```
+
+The gateway is built from the **effective** settings after the framework has
+applied its local and remote config, so a remote `modbus` section is reflected
+in the gateway that starts. See [Remote configuration](remote-config.md) for the
+runtime behavior.
+
+## Validation
+
+Validation is split between the YAML schema and the gateway core:
+
+- **Schema level** (`config.py`): types and unknown fields. A wrong type or an
+  unrecognized key raises `RuntimeError` when the file is read.
+- **Gateway level** (`to_gateway_config`): device-id range, framer
+  resolvability, and plugin dotted-path resolution. These are delegated to
+  `GatewayConfig.__post_init__`, so `GatewayConfigError` and
+  `SerialConnectionConfigError` propagate unchanged.
+
+A configuration error at startup is logged and the worker fails to start — it
+does not run with a partially applied config.
+
+## Regenerating defaults
+
+If `modbus.yml` is missing, the service writes a default file on first run. If
+the file exists but is invalid, it is **left untouched** and the service fails
+to start with a parse error — fix the file or remove it to regenerate defaults.
