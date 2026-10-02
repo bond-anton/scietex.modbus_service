@@ -31,7 +31,9 @@
     "healthcheck",
     "addopts",
     "pyproject",
-    "monkeypatches"
+    "monkeypatches",
+    "Thyracont",
+    "pymodbus"
   ],
   "ignoreWords": ["LICEN"],
   "import": []
