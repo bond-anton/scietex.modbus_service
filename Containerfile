@@ -16,7 +16,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
 COPY pyproject.toml .
-COPY Readme.md .
+COPY README.md .
 COPY LICENSE .
 COPY src/ ./src/
 RUN pip install --no-cache-dir -U pip && \
@@ -31,11 +31,23 @@ WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Run as non-root user
-# Create user and prepare config directory
-RUN useradd -m -u 1000 appuser && \
+# Run as non-root user.
+# The appuser is added to the host's dialout group (GID 20 on Debian) so it can
+# open serial devices passed with --device; the group is created if the base
+# image does not already provide it.
+RUN groupadd -g 20 dialout 2>/dev/null || true && \
+    useradd -m -u 1000 -G dialout appuser && \
     chown -R appuser:appuser /app && \
     chmod -R 755 /app
+
+# Configuration lives in a mounted volume so it survives container replacement.
+# SCIETEX_CONFIG_DIR is honored by the framework's prepare_conf_dir; the service
+# namespaces its files under <config-dir>/modbus/.
+ENV SCIETEX_CONFIG_DIR=/config \
+    SCIETEX_SERVICE_NAME=ModbusService \
+    SCIETEX_LOGGING_LEVEL=INFO
+RUN mkdir -p /config && chown appuser:appuser /config
+VOLUME ["/config"]
 
 USER appuser
 
