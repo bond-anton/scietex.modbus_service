@@ -1,6 +1,5 @@
-"""Microservice for GPIO control"""
+"""Modbus Gateway Service."""
 
-from .modbus_worker import ModbusWorker
 from .version import __version__
 
 __all__ = ["__version__", "ModbusWorker"]
