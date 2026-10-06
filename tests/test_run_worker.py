@@ -9,6 +9,7 @@ from scietex.modbus_service.run_worker import (
     _build_config,
     _build_parser,
 )
+from scietex.modbus_service.version import __version__
 
 
 def test_defaults_when_no_env_or_flags(monkeypatch) -> None:
@@ -56,3 +57,14 @@ def test_build_config_namespaces_framework_snapshot(monkeypatch) -> None:
     assert config.config_file == f"{MODBUS_CONFIG_SUBDIR}/config.yml"
     assert config.remote_config_enabled is True
     assert config.valkey_config is None
+
+
+def test_build_config_reports_package_version(monkeypatch) -> None:
+    """The worker reports its own package version, not the framework default."""
+    monkeypatch.delenv(ENV_SERVICE_NAME, raising=False)
+    monkeypatch.delenv(ENV_LOGGING_LEVEL, raising=False)
+    args = _build_parser().parse_args([])
+
+    config = _build_config(args)
+
+    assert config.version == __version__

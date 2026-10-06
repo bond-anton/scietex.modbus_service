@@ -12,7 +12,7 @@ classifiers = [
 ]
 dependencies = [
   "scietex.hal.serial>=2.0.0",
-  "scietex.service[valkey]~=5.0.0",
+  "scietex.service[valkey]~=5.1.0",
 ]
 dynamic = ["version"]
 
