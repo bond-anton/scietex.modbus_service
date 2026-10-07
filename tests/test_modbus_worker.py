@@ -38,8 +38,14 @@ async def test_cleanup_safe_when_never_started(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_initialize_fails_when_serial_port_unopenable(tmp_path, monkeypatch) -> None:
-    """A gateway bus that cannot open returns False and leaves refs cleaned up."""
+async def test_initialize_succeeds_when_serial_port_unopenable(tmp_path, monkeypatch, caplog) -> None:
+    """A missing serial port does not fail startup; the gateway stays up.
+
+    The gateway tolerates an unopenable bus (it reconnects on the next request),
+    so initialization succeeds and both the gateway and TCP server are built.
+    The TCP port is unprivileged so the serial port is the only failure.
+    """
+    import socket
 
     async def fake_initialize(self) -> bool:
         # Skip the live Valkey connect/config apply; only the gateway path is tested.
@@ -47,16 +53,30 @@ async def test_initialize_fails_when_serial_port_unopenable(tmp_path, monkeypatc
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
 
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        free_port = sock.getsockname()[1]
+
     config_path = tmp_path / MODBUS_CONFIG_SUBDIR / MODBUS_CONFIG_FILE
     config_path.parent.mkdir(parents=True)
     config_path.write_bytes(
-        msgspec.yaml.encode(ModbusServiceSettings(serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz")))
+        msgspec.yaml.encode(
+            ModbusServiceSettings(
+                host="127.0.0.1",
+                port=free_port,
+                serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
+            )
+        )
     )
     worker = _make_worker(tmp_path)
 
-    assert await worker.initialize() is False
-    assert worker.gateway is None
-    assert worker.tcp_server is None
+    with caplog.at_level(logging.WARNING):
+        assert await worker.initialize() is True
+
+    assert worker.gateway is not None
+    assert worker.tcp_server is not None
+    assert any("could not be opened" in record.message for record in caplog.records)
+    await worker.cleanup()
 
 
 def test_apply_hook_updates_settings_and_warns_on_running_gateway(tmp_path, caplog) -> None:
