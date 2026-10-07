@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     permissions:
+      # Required to check out a private repository.
+      contents: read
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
     steps:
