@@ -91,11 +91,12 @@ Full field reference: [Configuration](docs/configuration.md).
 
 ## Container
 
-A `Containerfile` is included. It runs as a non-root `appuser` in the `dialout`
-group, mounts `/config`, and sets `SCIETEX_CONFIG_DIR=/config`:
+A `Containerfile` is included. It installs the released package from PyPI
+(selected by the `VERSION` build arg), runs as a non-root `appuser` in the
+`dialout` group, mounts `/config`, and sets `SCIETEX_CONFIG_DIR=/config`:
 
 ```bash
-podman build -t scietex-modbus-service .
+podman build --build-arg VERSION=1.1.0 -t scietex-modbus-service .
 podman run --rm \
   --device /dev/ttyUSB0 \
   --cap-add NET_BIND_SERVICE \
