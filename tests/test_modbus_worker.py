@@ -1,14 +1,30 @@
 """Tests for the ModbusWorker gateway lifecycle and config apply hook."""
 
 import logging
+import os
+import socket
+from pathlib import Path
 
 import msgspec
 import pytest
+from pymodbus.datastore import ModbusDeviceContext
+from pymodbus.pdu import ExceptionResponse
+from pymodbus.pdu.register_message import (
+    ReadHoldingRegistersRequest,
+    ReadHoldingRegistersResponse,
+)
+from scietex.hal.serial.config import ModbusSerialConnectionConfig
+from scietex.hal.serial.server.rs485_server import (
+    ReactiveSequentialDataBlock,
+    RS485Server,
+)
+from scietex.hal.serial.virtual import VirtualSerialPair
 from scietex.service import ValkeyWorker, ValkeyWorkerConfig
 
 from scietex.modbus_service.config import (
     MODBUS_CONFIG_FILE,
     MODBUS_CONFIG_SUBDIR,
+    ModbusDeviceSettings,
     ModbusSerialSettings,
     ModbusServiceSettings,
 )
@@ -24,6 +40,47 @@ def _make_worker(tmp_path) -> ModbusWorker:
             remote_config_enabled=False,
         )
     )
+
+
+def _free_port() -> int:
+    """Pick a free unprivileged TCP port."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _write_config(tmp_path, *, serial_port: str, devices: dict) -> None:
+    """Write a modbus.yml with an unprivileged TCP port and the given devices."""
+    config_path = tmp_path / MODBUS_CONFIG_SUBDIR / MODBUS_CONFIG_FILE
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_bytes(
+        msgspec.yaml.encode(
+            ModbusServiceSettings(
+                host="127.0.0.1",
+                port=_free_port(),
+                serial=ModbusSerialSettings(port=serial_port),
+                devices=devices,
+            )
+        )
+    )
+
+
+@pytest.fixture
+def vsp():
+    """A virtual serial pair, stopped on teardown."""
+    pair = VirtualSerialPair()
+    pair.start()
+    yield pair
+    pair.stop()
+
+
+@pytest.fixture
+def bus_server(vsp):
+    """An RS485 server on one end of the virtual pair."""
+    block = ReactiveSequentialDataBlock(0x01, list(range(1, 101)))
+    store = ModbusDeviceContext(di=block, co=block, hr=block, ir=block)
+    serial = ModbusSerialConnectionConfig(vsp.serial_ports[0], timeout=0.5)
+    return RS485Server(serial, devices={1: store})
 
 
 @pytest.mark.asyncio
@@ -45,7 +102,6 @@ async def test_initialize_succeeds_when_serial_port_unopenable(tmp_path, monkeyp
     so initialization succeeds and both the gateway and TCP server are built.
     The TCP port is unprivileged so the serial port is the only failure.
     """
-    import socket
 
     async def fake_initialize(self) -> bool:
         # Skip the live Valkey connect/config apply; only the gateway path is tested.
@@ -53,20 +109,10 @@ async def test_initialize_succeeds_when_serial_port_unopenable(tmp_path, monkeyp
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
 
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        free_port = sock.getsockname()[1]
-
-    config_path = tmp_path / MODBUS_CONFIG_SUBDIR / MODBUS_CONFIG_FILE
-    config_path.parent.mkdir(parents=True)
-    config_path.write_bytes(
-        msgspec.yaml.encode(
-            ModbusServiceSettings(
-                host="127.0.0.1",
-                port=free_port,
-                serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
-            )
-        )
+    _write_config(
+        tmp_path,
+        serial_port="/dev/nonexistent-port-xyz",
+        devices={1: ModbusDeviceSettings(framer="RTU")},
     )
     worker = _make_worker(tmp_path)
 
@@ -77,6 +123,123 @@ async def test_initialize_succeeds_when_serial_port_unopenable(tmp_path, monkeyp
     assert worker.tcp_server is not None
     assert any("could not be opened" in record.message for record in caplog.records)
     await worker.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_gateway_recovers_when_port_appears_after_start(tmp_path, monkeypatch, vsp, bus_server) -> None:
+    """The worker's gateway recovers once a port missing at startup appears.
+
+    The worker is pointed at a symlink that does not exist yet, so startup
+    succeeds with the bus down. Creating the symlink to a live bus port must let
+    the next request through the worker's gateway reconnect and succeed.
+    """
+
+    async def fake_initialize(self) -> bool:
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+
+    await bus_server.start()
+    late_port = Path(tmp_path) / "late-port"
+    _write_config(
+        tmp_path,
+        serial_port=str(late_port),
+        devices={1: ModbusDeviceSettings(framer="RTU")},
+    )
+    worker = _make_worker(tmp_path)
+    assert await worker.initialize() is True
+    try:
+        request = ReadHoldingRegistersRequest(address=0, count=2, dev_id=1)
+        before = await worker.gateway.handle_request(1, request)
+        assert isinstance(before, ExceptionResponse)
+        assert before.exception_code == 0x0B
+
+        os.symlink(vsp.serial_ports[1], late_port)
+        after = await worker.gateway.handle_request(1, ReadHoldingRegistersRequest(address=0, count=2, dev_id=1))
+        assert isinstance(after, ReadHoldingRegistersResponse)
+        assert after.registers == [1, 2]
+    finally:
+        await worker.cleanup()
+        await bus_server.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_recovers_when_port_returns_after_loss(tmp_path, monkeypatch, vsp, bus_server) -> None:
+    """The worker's gateway recovers once a port lost after startup returns."""
+
+    async def fake_initialize(self) -> bool:
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+
+    await bus_server.start()
+    _write_config(
+        tmp_path,
+        serial_port=vsp.serial_ports[1],
+        devices={1: ModbusDeviceSettings(framer="RTU")},
+    )
+    worker = _make_worker(tmp_path)
+    assert await worker.initialize() is True
+    try:
+        request = ReadHoldingRegistersRequest(address=0, count=2, dev_id=1)
+        healthy = await worker.gateway.handle_request(1, request)
+        assert isinstance(healthy, ReadHoldingRegistersResponse)
+
+        await bus_server.stop()
+        gone = await worker.gateway.handle_request(1, ReadHoldingRegistersRequest(address=0, count=2, dev_id=1))
+        assert isinstance(gone, ExceptionResponse)
+        assert gone.exception_code == 0x0B
+
+        block = ReactiveSequentialDataBlock(0x01, list(range(1, 101)))
+        store = ModbusDeviceContext(di=block, co=block, hr=block, ir=block)
+        serial = ModbusSerialConnectionConfig(vsp.serial_ports[0], timeout=0.5)
+        bus_server = RS485Server(serial, devices={1: store})
+        await bus_server.start()
+        back = await worker.gateway.handle_request(1, ReadHoldingRegistersRequest(address=0, count=2, dev_id=1))
+        assert isinstance(back, ReadHoldingRegistersResponse)
+        assert back.registers == [1, 2]
+    finally:
+        await worker.cleanup()
+        await bus_server.stop()
+
+
+@pytest.mark.asyncio
+async def test_gateway_recovers_when_permissions_restored(tmp_path, monkeypatch, vsp, bus_server) -> None:
+    """The worker's gateway recovers once port permissions are restored.
+
+    The port is unreadable at startup (EACCES), so the initial connect fails and
+    the request yields 0x0B. Restoring the permissions lets the next request
+    reconnect and succeed.
+    """
+
+    async def fake_initialize(self) -> bool:
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+
+    await bus_server.start()
+    gateway_port = vsp.serial_ports[1]
+    os.chmod(gateway_port, 0o000)
+    _write_config(
+        tmp_path,
+        serial_port=gateway_port,
+        devices={1: ModbusDeviceSettings(framer="RTU")},
+    )
+    worker = _make_worker(tmp_path)
+    try:
+        assert await worker.initialize() is True
+        denied = await worker.gateway.handle_request(1, ReadHoldingRegistersRequest(address=0, count=2, dev_id=1))
+        assert isinstance(denied, ExceptionResponse)
+        assert denied.exception_code == 0x0B
+
+        os.chmod(gateway_port, 0o600)
+        restored = await worker.gateway.handle_request(1, ReadHoldingRegistersRequest(address=0, count=2, dev_id=1))
+        assert isinstance(restored, ReadHoldingRegistersResponse)
+        assert restored.registers == [1, 2]
+    finally:
+        os.chmod(gateway_port, 0o600)
+        await worker.cleanup()
+        await bus_server.stop()
 
 
 def test_apply_hook_updates_settings_and_warns_on_running_gateway(tmp_path, caplog) -> None:
