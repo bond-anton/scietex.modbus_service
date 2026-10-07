@@ -83,8 +83,10 @@ The container runs as `appuser`, which is a member of the `dialout` group
 2. Ensure the host device's group matches `dialout` (GID 20), or adjust the
    `groupadd`/`useradd` lines in the `Containerfile` to match your host.
 
-Without `--device`, the serial port inside the container does not exist and the
-gateway fails to start.
+Without `--device`, the serial port inside the container does not exist. The
+gateway still starts — it logs a warning that the bus could not be opened and
+retries on each request — but every request fails until the device is passed
+through and the container is restarted.
 
 ## Port 502
 

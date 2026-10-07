@@ -18,6 +18,9 @@ no special protocol, no per-device client configuration.
   heartbeat, watchdog, and graceful shutdown inherited from `ValkeyWorker`.
 - **Accepts remote configuration** through the framework's config channel, but
   the gateway is restart-required — see [Remote configuration](remote-config.md).
+- **Tolerates a missing serial port at startup.** If the port cannot be opened,
+  the worker still starts and logs a warning; it retries on each request and
+  connects automatically once the device appears.
 
 ## How it fits together
 
