@@ -97,6 +97,10 @@ gateway still starts — it logs a warning that the bus could not be opened and
 retries on each request — but every request fails until the device is passed
 through and the container is restarted.
 
+For static UARTs, USB adapters with unstable `ttyUSB*` numbering, hotplug, and
+the SELinux and group requirements of rootless containers, see
+[Serial device access](serial-devices.md).
+
 ## Port 502
 
 Port 502 is privileged (below 1024). Binding it inside the container requires
