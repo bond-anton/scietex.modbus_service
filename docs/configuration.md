@@ -30,13 +30,22 @@ The service namespaces its files under a `modbus/` subdirectory so that multiple
 
 ```
 <conf_dir>/
+├── config.yml         # framework core snapshot: core: + services: (shared root)
 └── modbus/
     ├── modbus.yml     # service-owned bootstrap (this page)
-    └── config.yml     # framework snapshot (remote config; see remote-config.md)
+    └── config.yml     # framework snapshot: core: + services.modbus (see remote-config.md)
 ```
 
 `MODBUS_CONFIG_SUBDIR` in `config.py` is the single source of truth for the
-subdirectory name.
+subdirectory name. The service sets `config_file="modbus/config.yml"`, so the
+framework's snapshot lands at `<conf_dir>/modbus/config.yml` and holds `core:`
+plus `services.modbus`. The shared root `<conf_dir>/config.yml` is the
+framework's core snapshot, separate from both.
+
+`modbus.yml` is a **flat service schema** (`ModbusServiceSettings`) that holds
+only the modbus section. It can never carry a `core:` key:
+`forbid_unknown_fields=True` rejects that as an unknown field. The framework
+never writes `modbus.yml`.
 
 ## `modbus.yml` schema
 
@@ -113,8 +122,13 @@ first request.
 Effective settings are resolved in this order, later sources winning:
 
 ```
-constructor default  <  modbus.yml  <  framework config.yml / remote modbus section
+constructor default  <  modbus.yml  <  config.yml  <  remote modbus section
 ```
+
+`config.yml` is the namespaced snapshot at `<conf_dir>/modbus/config.yml`. A
+successful remote apply auto-writes it (see
+[Remote configuration](remote-config.md)), so it mirrors the last-applied remote
+config and is re-applied ahead of the remote read on the next start.
 
 The gateway is built from the **effective** settings after the framework has
 applied its local and remote config, so a remote `modbus` section is reflected

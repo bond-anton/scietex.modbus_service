@@ -43,7 +43,7 @@ next restart.
 ## Settings precedence
 
 ```
-constructor default  <  modbus.yml  <  framework config.yml / remote modbus section
+constructor default  <  modbus.yml  <  config.yml  <  remote modbus section
 ```
 
 The remote section is authoritative when present. On every run the worker starts
@@ -67,11 +67,14 @@ documented in the
 
 ### `config:store` and `modbus.yml`
 
-`config:store` with `target="disk"` writes the framework snapshot to
-`<conf_dir>/modbus/config.yml` — **not** to `modbus.yml`. The service-owned
-bootstrap file is never rewritten by the framework. To make a stored config
-survive a restart, the operator either relies on the framework re-applying
-`config.yml`, or copies the desired values into `modbus.yml` manually.
+The framework now **auto-persists** the effective config to
+`<conf_dir>/modbus/config.yml` on every successful remote apply at startup, not
+only on an explicit `config:store`. The snapshot mirrors the last-applied remote
+config and is re-applied ahead of the remote read on the next start.
+
+`modbus.yml` is never rewritten by the framework; it stays a pure first-run
+bootstrap. `config:store` remains available for explicit persistence to disk,
+remote, or both (`target`).
 
 ## Restart-required fields
 
