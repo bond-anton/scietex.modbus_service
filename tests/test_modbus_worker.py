@@ -20,13 +20,21 @@ from scietex.hal.serial.server.rs485_server import (
 )
 from scietex.hal.serial.virtual import VirtualSerialPair
 from scietex.service import ValkeyWorker, ValkeyWorkerConfig
+from scietex.service.config_reload import (
+    CONFIG_SOURCE_UNAVAILABLE,
+    ConfigApplyOutcome,
+    DeclarativeSections,
+    write_local_config,
+)
 
 from scietex.modbus_service.config import (
     MODBUS_CONFIG_FILE,
     MODBUS_CONFIG_SUBDIR,
+    MODBUS_SECTION,
     ModbusDeviceSettings,
     ModbusSerialSettings,
     ModbusServiceSettings,
+    read_modbus_config,
 )
 from scietex.modbus_service.modbus_worker import ModbusWorker
 
@@ -38,6 +46,18 @@ def _make_worker(tmp_path) -> ModbusWorker:
             service_name="test",
             conf_dir=str(tmp_path),
             remote_config_enabled=False,
+        )
+    )
+
+
+def _make_remote_worker(tmp_path) -> ModbusWorker:
+    """Build a worker with remote config enabled and a namespaced snapshot file."""
+    return ModbusWorker(
+        ValkeyWorkerConfig(
+            service_name="test",
+            conf_dir=str(tmp_path),
+            remote_config_enabled=True,
+            config_file=f"{MODBUS_CONFIG_SUBDIR}/config.yml",
         )
     )
 
@@ -264,3 +284,78 @@ def test_apply_hook_logs_info_when_gateway_not_started(tmp_path, caplog) -> None
 
     assert worker.modbus_settings is settings
     assert any("Stored Modbus settings" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_remote_apply_persists_config_yml(tmp_path, monkeypatch) -> None:
+    """A successful remote apply mirrors the config to the namespaced config.yml."""
+
+    async def fake_remote_outcome(self) -> ConfigApplyOutcome:
+        return ConfigApplyOutcome(applied=True, revision=1, hash="abc123", changed=[])
+
+    monkeypatch.setattr(ValkeyWorker, "_read_remote_outcome", fake_remote_outcome)
+    worker = _make_remote_worker(tmp_path)
+
+    await worker._reload_remote_config()
+
+    snapshot = tmp_path / MODBUS_CONFIG_SUBDIR / "config.yml"
+    assert snapshot.is_file()
+    assert snapshot.read_bytes()
+
+
+@pytest.mark.asyncio
+async def test_remote_unavailable_does_not_write_config_yml(tmp_path, monkeypatch) -> None:
+    """An unavailable remote source does not create a config.yml snapshot."""
+
+    async def fake_remote_outcome(self) -> ConfigApplyOutcome:
+        return ConfigApplyOutcome(applied=False, error_code=CONFIG_SOURCE_UNAVAILABLE)
+
+    monkeypatch.setattr(ValkeyWorker, "_read_remote_outcome", fake_remote_outcome)
+    worker = _make_remote_worker(tmp_path)
+
+    await worker._reload_remote_config()
+
+    assert not (tmp_path / MODBUS_CONFIG_SUBDIR / "config.yml").exists()
+
+
+@pytest.mark.asyncio
+async def test_modbus_yml_is_not_rewritten_by_remote_apply(tmp_path, monkeypatch) -> None:
+    """A remote apply writes only config.yml; modbus.yml stays a pure bootstrap."""
+
+    async def fake_remote_outcome(self) -> ConfigApplyOutcome:
+        return ConfigApplyOutcome(applied=True, revision=1, hash="abc123", changed=[])
+
+    monkeypatch.setattr(ValkeyWorker, "_read_remote_outcome", fake_remote_outcome)
+    _write_config(tmp_path, serial_port="/dev/ttyS0", devices={1: ModbusDeviceSettings(framer="RTU")})
+    modbus_yml = tmp_path / MODBUS_CONFIG_SUBDIR / MODBUS_CONFIG_FILE
+    before = modbus_yml.read_bytes()
+    worker = _make_remote_worker(tmp_path)
+
+    await worker._reload_remote_config()
+
+    assert modbus_yml.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_config_yml_applied_instead_of_bootstrap_on_restart(tmp_path) -> None:
+    """A persisted config.yml overrides the modbus.yml bootstrap on the next start.
+
+    The startup pipeline reads modbus.yml first, then applies the framework's
+    config.yml snapshot ahead of the remote read, so the snapshot's modbus
+    section must win over the bootstrap value.
+    """
+    _write_config(tmp_path, serial_port="/dev/ttyS0", devices={1: ModbusDeviceSettings(framer="RTU")})
+    snapshot = DeclarativeSections(
+        services={
+            MODBUS_SECTION: msgspec.msgpack.encode(ModbusServiceSettings(serial=ModbusSerialSettings(port="/dev/ttyS1")))
+        }
+    )
+    write_local_config(tmp_path / MODBUS_CONFIG_SUBDIR / "config.yml", snapshot)
+    worker = _make_remote_worker(tmp_path)
+    # Reproduce ModbusWorker.initialize's first step, before the framework apply.
+    worker._settings = read_modbus_config(worker.conf_dir)
+    assert worker.modbus_settings.serial.port == "/dev/ttyS0"
+
+    await worker._apply_local_config()
+
+    assert worker.modbus_settings.serial.port == "/dev/ttyS1"
