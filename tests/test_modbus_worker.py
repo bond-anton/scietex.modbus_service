@@ -31,10 +31,10 @@ from scietex.modbus_service.config import (
     MODBUS_CONFIG_FILE,
     MODBUS_CONFIG_SUBDIR,
     MODBUS_SECTION,
+    MODBUS_SETTINGS_DEFAULTS,
     ModbusDeviceSettings,
     ModbusSerialSettings,
     ModbusServiceSettings,
-    read_modbus_config,
 )
 from scietex.modbus_service.modbus_worker import ModbusWorker
 
@@ -124,7 +124,8 @@ async def test_initialize_succeeds_when_serial_port_unopenable(tmp_path, monkeyp
     """
 
     async def fake_initialize(self) -> bool:
-        # Skip the live Valkey connect/config apply; only the gateway path is tested.
+        # Skip the live Valkey connect; seed L0+L1 so the merged settings resolve.
+        self.seed_config_bootstrap()
         return True
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
@@ -155,6 +156,7 @@ async def test_gateway_recovers_when_port_appears_after_start(tmp_path, monkeypa
     """
 
     async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
         return True
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
@@ -188,6 +190,7 @@ async def test_gateway_recovers_when_port_returns_after_loss(tmp_path, monkeypat
     """The worker's gateway recovers once a port lost after startup returns."""
 
     async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
         return True
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
@@ -233,6 +236,7 @@ async def test_gateway_recovers_when_permissions_restored(tmp_path, monkeypatch,
     """
 
     async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
         return True
 
     monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
@@ -340,22 +344,74 @@ async def test_modbus_yml_is_not_rewritten_by_remote_apply(tmp_path, monkeypatch
 async def test_config_yml_applied_instead_of_bootstrap_on_restart(tmp_path) -> None:
     """A persisted config.yml overrides the modbus.yml bootstrap on the next start.
 
-    The startup pipeline reads modbus.yml first, then applies the framework's
+    The startup pipeline seeds L0+L1 from modbus.yml, then applies the framework's
     config.yml snapshot ahead of the remote read, so the snapshot's modbus
     section must win over the bootstrap value.
     """
     _write_config(tmp_path, serial_port="/dev/ttyS0", devices={1: ModbusDeviceSettings(framer="RTU")})
-    snapshot = DeclarativeSections(
-        services={
-            MODBUS_SECTION: msgspec.msgpack.encode(ModbusServiceSettings(serial=ModbusSerialSettings(port="/dev/ttyS1")))
-        }
-    )
+    snapshot = DeclarativeSections(services={MODBUS_SECTION: {"serial": {"port": "/dev/ttyS1"}}})
     write_local_config(tmp_path / MODBUS_CONFIG_SUBDIR / "config.yml", snapshot)
     worker = _make_remote_worker(tmp_path)
-    # Reproduce ModbusWorker.initialize's first step, before the framework apply.
-    worker._settings = read_modbus_config(worker.conf_dir)
+    # Reproduce ModbusWorker.initialize's first step: seed L0+L1, before the framework apply.
+    worker.seed_config_bootstrap()
+    worker._settings = worker.current_config_settings(MODBUS_SECTION)
     assert worker.modbus_settings.serial.port == "/dev/ttyS0"
 
     await worker._apply_local_config()
 
     assert worker.modbus_settings.serial.port == "/dev/ttyS1"
+
+
+@pytest.mark.asyncio
+async def test_initialize_fails_on_bad_config(tmp_path, monkeypatch, caplog) -> None:
+    """A bootstrap failure leaves the section unresolved and initialize returns False."""
+
+    async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
+        return True
+
+    def bad_loader(conf_dir, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+    monkeypatch.setattr("scietex.modbus_service.modbus_worker.read_modbus_config", bad_loader)
+    worker = _make_worker(tmp_path)
+
+    with caplog.at_level(logging.ERROR):
+        assert await worker.initialize() is False
+
+    assert worker.gateway is None
+    assert any("were not resolved" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_initialize_uses_merged_settings(tmp_path, monkeypatch) -> None:
+    """initialize() reads the merged struct: the bootstrap patch overlays L0."""
+
+    async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+    monkeypatch.setattr("scietex.modbus_service.modbus_worker.read_modbus_config", lambda conf_dir, **kw: {"port": 5020})
+    worker = _make_worker(tmp_path)
+
+    assert await worker.initialize() is True
+
+    assert worker.modbus_settings.port == 5020
+    assert worker.modbus_settings.host == "0.0.0.0"
+    await worker.cleanup()
+
+
+def test_bootstrap_provider_returns_patch_dict(tmp_path, monkeypatch) -> None:
+    """The registered bootstrap provider yields a dict that merges onto the L0 base."""
+    monkeypatch.setattr("scietex.modbus_service.modbus_worker.read_modbus_config", lambda conf_dir, **kw: {"port": 5020})
+    worker = _make_worker(tmp_path)
+
+    worker.seed_config_bootstrap()
+
+    resolved = worker.current_config_settings(MODBUS_SECTION)
+    assert isinstance(resolved, ModbusServiceSettings)
+    assert resolved.port == 5020
+    assert resolved.host == "0.0.0.0"
+    assert MODBUS_SETTINGS_DEFAULTS.port == 502

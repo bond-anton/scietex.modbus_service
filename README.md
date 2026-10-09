@@ -35,7 +35,12 @@ This pulls in `scietex.hal.serial` (the gateway core) and
 ### 1. Write a configuration file
 
 The service reads `modbus.yml` from a `modbus/` subdirectory of its config
-directory. Create it by hand, or let the service generate defaults on first run:
+directory. Create it by hand, or let the service generate defaults on first run.
+The file is the bootstrap layer of a four-layer merge: constructor defaults <
+`modbus.yml` < the framework's `config.yml` snapshot < the remote `modbus`
+section. Each layer is a field-level patch — a key absent from a layer inherits
+the layer below, `null` clears it back to the constructor default, and a value
+sets it:
 
 ```yaml
 serial:
@@ -77,6 +82,9 @@ device id as the unit id. No special protocol is required.
 
 ## Configuration at a glance
 
+The defaults below are the constructor (L0) values: a field absent from every
+layer, or explicitly cleared with `null`, resolves to the value shown.
+
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `serial.port` | `/dev/ttyUSB0` | Serial device path |
@@ -96,7 +104,7 @@ A `Containerfile` is included. It installs the released package from PyPI
 `dialout` group, mounts `/config`, and sets `SCIETEX_CONFIG_DIR=/config`:
 
 ```bash
-podman build --build-arg VERSION=1.1.0 -t scietex-modbus-service .
+podman build --build-arg VERSION=2.0.0 -t scietex-modbus-service .
 podman run --rm \
   --device /dev/ttyUSB0 \
   --cap-add NET_BIND_SERVICE \

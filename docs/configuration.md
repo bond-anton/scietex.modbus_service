@@ -1,9 +1,12 @@
 # Configuration
 
 The service reads its bootstrap settings from `modbus.yml`, a YAML file in a
-`modbus/` subdirectory of the config directory. The file is decoded with
-`msgspec.yaml` into a frozen struct with `forbid_unknown_fields=True`, so a typo
-in a field name is a hard error, not a silently ignored key.
+`modbus/` subdirectory of the config directory. The file is the **L1 bootstrap
+patch** of the framework's four-layer merge: a field-level map merged onto the
+constructor defaults, then overlaid by the framework's `config.yml` snapshot and
+the remote `modbus` section. The merged result is validated through
+`ModbusServiceSettings`, a frozen struct with `forbid_unknown_fields=True`, so a
+typo in a field name is a hard error, not a silently ignored key.
 
 ## Config directory resolution
 
@@ -30,7 +33,6 @@ The service namespaces its files under a `modbus/` subdirectory so that multiple
 
 ```
 <conf_dir>/
-├── config.yml         # framework core snapshot: core: + services: (shared root)
 └── modbus/
     ├── modbus.yml     # service-owned bootstrap (this page)
     └── config.yml     # framework snapshot: core: + services.modbus (see remote-config.md)
@@ -39,13 +41,13 @@ The service namespaces its files under a `modbus/` subdirectory so that multiple
 `MODBUS_CONFIG_SUBDIR` in `config.py` is the single source of truth for the
 subdirectory name. The service sets `config_file="modbus/config.yml"`, so the
 framework's snapshot lands at `<conf_dir>/modbus/config.yml` and holds `core:`
-plus `services.modbus`. The shared root `<conf_dir>/config.yml` is the
-framework's core snapshot, separate from both.
+plus `services.modbus`. The framework writes exactly this one snapshot per
+service; there is no separate shared root `config.yml`.
 
-`modbus.yml` is a **flat service schema** (`ModbusServiceSettings`) that holds
-only the modbus section. It can never carry a `core:` key:
-`forbid_unknown_fields=True` rejects that as an unknown field. The framework
-never writes `modbus.yml`.
+`modbus.yml` is the **L1 bootstrap patch**: a field-level map that holds only the
+modbus section. It can never carry a `core:` key — the framework converts the
+merged section through `ModbusServiceSettings`, whose `forbid_unknown_fields=True`
+rejects that as an unknown field. The framework never writes `modbus.yml`.
 
 ## `modbus.yml` schema
 
@@ -119,28 +121,43 @@ first request.
 
 ## Settings precedence
 
-Effective settings are resolved in this order, later sources winning:
+Effective settings resolve through four layers, later layers winning:
 
 ```
-constructor default  <  modbus.yml  <  config.yml  <  remote modbus section
+constructor default (L0)  <  modbus.yml (L1)  <  config.yml (L2)  <  remote modbus section (L3)
 ```
 
-`config.yml` is the namespaced snapshot at `<conf_dir>/modbus/config.yml`. A
-successful remote apply auto-writes it (see
+Each layer is a **field-level patch**, not a whole-object replacement. The merge
+is RFC 7396, so a key has three states:
+
+- **absent** — inherit the value from the layer below;
+- **`null`** — clear the field, falling back to the L0 constructor default;
+- **a value** — set the field.
+
+The L0 base is `MODBUS_SETTINGS_DEFAULTS` (a concrete `ModbusServiceSettings`
+instance). `config.yml` is the namespaced snapshot at
+`<conf_dir>/modbus/config.yml`. A successful remote apply auto-writes it (see
 [Remote configuration](remote-config.md)), so it mirrors the last-applied remote
 config and is re-applied ahead of the remote read on the next start.
 
 The gateway is built from the **effective** settings after the framework has
-applied its local and remote config, so a remote `modbus` section is reflected
-in the gateway that starts. See [Remote configuration](remote-config.md) for the
-runtime behavior.
+seeded L0+L1 and applied its local and remote config, so a remote `modbus`
+section is reflected in the gateway that starts. See
+[Remote configuration](remote-config.md) for the runtime behavior.
 
 ## Validation
 
-Validation is split between the YAML schema and the gateway core:
+Validation is split between the loader, the merge, and the gateway core:
 
-- **Schema level** (`config.py`): types and unknown fields. A wrong type or an
-  unrecognized key raises `RuntimeError` when the file is read.
+- **Loader level** (`read_modbus_config`): YAML parse errors. The loader returns
+  the raw `modbus.yml` mapping (`dict[str, object]`) as the L1 patch — it does not
+  decode into a struct; struct conversion happens at the merge level. An
+  unparseable `modbus.yml` raises `RuntimeError`; the framework's bootstrap seeder
+  catches it, logs it, and leaves the section unresolved, so the worker fails to
+  start.
+- **Merge level** (`ModbusServiceSettings`): types and unknown fields. The merged
+  section is converted through the struct, so a wrong type or an unrecognized key
+  is rejected.
 - **Gateway level** (`to_gateway_config`): device-id range, framer
   resolvability, and plugin dotted-path resolution. These are delegated to
   `GatewayConfig.__post_init__`, so `GatewayConfigError` and
@@ -152,5 +169,7 @@ does not run with a partially applied config.
 ## Regenerating defaults
 
 If `modbus.yml` is missing, the service writes a default file on first run. If
-the file exists but is invalid, it is **left untouched** and the service fails
-to start with a parse error — fix the file or remove it to regenerate defaults.
+the file exists but is invalid, it is **left untouched**: the loader raises
+`RuntimeError`, the framework's bootstrap seeder swallows it, the section stays
+unresolved, and the worker fails to start — fix the file or remove it to
+regenerate defaults.

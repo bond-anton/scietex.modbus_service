@@ -12,7 +12,7 @@ non-standard (vendor) protocol plugin mechanism, and how the first plugin —
 The gateway core already supports non-Modbus devices through a **translator
 plugin**: a per-device `GatewayTranslator` maps standard Modbus PDUs to and from
 a vendor protocol. The mechanism is fully implemented in `scietex.hal.serial`
-2.0.0 (see its `docs/design/modbus-gateway-nonstandard.md`):
+2.0.0 (current floor 2.0.2; see its `docs/design/modbus-gateway-nonstandard.md`):
 
 - `GatewayTranslator` protocol — `to_vendor(request)` / `to_standard(response)`,
   both pure (no I/O).

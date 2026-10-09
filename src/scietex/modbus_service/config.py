@@ -1,10 +1,12 @@
 """Configuration models and YAML loader for the Modbus gateway service.
 
-`ModbusServiceSettings` is the service-owned bootstrap snapshot stored in
-`modbus.yml` under the config directory. It is kept deliberately thin: device-id
-range, framer resolvability, and plugin dotted-path resolution are delegated to
-`GatewayConfig.__post_init__` via `to_gateway_config`, so the YAML schema only
-constrains types and unknown fields.
+`ModbusServiceSettings` is the concrete constructor (L0) base and the validation
+target of the framework's four-layer config merge. `modbus.yml` is the L1
+bootstrap patch: a field-level map merged onto L0, then overlaid by the
+framework's `config.yml` snapshot (L2) and the remote `modbus` section (L3). The
+struct is kept deliberately thin: device-id range, framer resolvability, and
+plugin dotted-path resolution are delegated to `GatewayConfig.__post_init__` via
+`to_gateway_config`, so the YAML schema only constrains types and unknown fields.
 
 The serial settings intentionally omit a ``framer`` field: the gateway selects
 framing per device via `GatewayConfig.default_framer` (and each device's own
@@ -34,7 +36,7 @@ MODBUS_SECTION: str = "modbus"
 #: framework resolves a single dir for all scietex services) cannot collide.
 MODBUS_CONFIG_SUBDIR: str = "modbus"
 
-#: Filename of the service-owned bootstrap snapshot in the config subdirectory.
+#: Filename of the service-owned L1 bootstrap patch in the config subdirectory.
 MODBUS_CONFIG_FILE: str = "modbus.yml"
 
 
@@ -85,16 +87,26 @@ class ModbusServiceSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     bus_retries: int = 0
 
 
-def read_modbus_config(conf_dir: Path | None, *, create_default: bool = True) -> ModbusServiceSettings:
-    """Read Modbus settings from ``modbus/modbus.yml`` under the config directory.
+#: Concrete L0 base for the framework's layered merge. A field absent from every
+#: layer, or explicitly cleared with ``null``, resolves to the value here.
+MODBUS_SETTINGS_DEFAULTS: ModbusServiceSettings = ModbusServiceSettings()
+
+
+def read_modbus_config(conf_dir: Path | None, *, create_default: bool = True) -> dict[str, object]:
+    """Read the L1 bootstrap patch from ``modbus/modbus.yml`` under the config directory.
 
     The service's files are namespaced in a ``modbus/`` subdirectory so they do
     not collide with other services sharing the framework's single config dir.
-    Mirrors `read_valkey_config` otherwise: the file (and, when missing, its
-    directory) is only created when ``create_default=True`` (the bootstrap path).
-    A ``None`` or non-directory ``conf_dir``, a missing file/directory with
-    ``create_default=False``, or an unparseable file each raise `RuntimeError`.
-    An existing-but-invalid file is left untouched regardless of ``create_default``.
+    The file (and, when missing, its directory) is only created when
+    ``create_default=True`` (the bootstrap path). A ``None`` or non-directory
+    ``conf_dir``, a missing file/directory with ``create_default=False``, or an
+    unparseable file each raise `RuntimeError`. An existing-but-invalid file is
+    left untouched regardless of ``create_default``.
+
+    The return value is the raw ``modbus.yml`` mapping — the L1 patch the
+    framework merges onto the L0 base and validates through
+    `ModbusServiceSettings`. When the file is just created, the builtins of the
+    default struct are returned so the patch is equivalent to an empty override.
 
     Args:
         conf_dir: Path to the configuration directory.
@@ -102,7 +114,8 @@ def read_modbus_config(conf_dir: Path | None, *, create_default: bool = True) ->
             ``modbus.yml`` when missing. Default ``True``.
 
     Returns:
-        A `ModbusServiceSettings` loaded from ``modbus.yml`` or default values.
+        The parsed ``modbus.yml`` mapping as the L1 patch, or the builtins of the
+        default `ModbusServiceSettings` when the file was just created.
 
     Raises:
         RuntimeError: If ``conf_dir`` is ``None`` or not a directory, the file
@@ -129,14 +142,14 @@ def read_modbus_config(conf_dir: Path | None, *, create_default: bool = True) ->
             settings = ModbusServiceSettings()
             with open(modbus_yml, "wb") as f:
                 f.write(msgspec.yaml.encode(settings))
-            return settings
+            return msgspec.to_builtins(settings)
         raise RuntimeError(
             f"Modbus configuration file {modbus_yml} does not exist and create_default=False "
             "(pass create_default=True to generate defaults)."
         )
     try:
         with open(modbus_yml, "rb") as f:
-            return msgspec.yaml.decode(f.read(), type=ModbusServiceSettings, strict=True)
+            return msgspec.yaml.decode(f.read(), type=dict)
     except Exception as exc:
         raise RuntimeError(
             f"Failed to parse Modbus configuration file {modbus_yml}. Fix the file or remove it to regenerate defaults."

@@ -19,14 +19,18 @@ self.register_config_settings(
     MODBUS_SECTION,          # "modbus"
     ModbusServiceSettings,
     apply=self._apply_modbus_settings,
+    defaults=MODBUS_SETTINGS_DEFAULTS,               # L0 base
+    bootstrap=lambda: read_modbus_config(self.conf_dir),  # L1 patch dict
 )
 ```
 
-The framework validates the section against `ModbusServiceSettings`
-(`forbid_unknown_fields=True`, so a typo is rejected), then calls the apply hook.
-The hook runs `to_gateway_config(settings)` to validate declaratively — a bad
-device id, framer, or plugin path raises, which the framework reports as a
-failed apply — then stores the settings.
+`defaults` is the concrete L0 base; `bootstrap` returns the `modbus.yml` patch
+dict. The framework seeds L0+L1 during `initialize()` and validates the merged
+section against `ModbusServiceSettings` (`forbid_unknown_fields=True`, so a typo
+is rejected), then calls the apply hook. The hook runs
+`to_gateway_config(settings)` to validate declaratively — a bad device id,
+framer, or plugin path raises, which the framework reports as a failed apply —
+then stores the settings.
 
 ## Apply behavior
 
@@ -43,12 +47,14 @@ next restart.
 ## Settings precedence
 
 ```
-constructor default  <  modbus.yml  <  config.yml  <  remote modbus section
+constructor default (L0)  <  modbus.yml (L1)  <  config.yml (L2)  <  remote modbus section (L3)
 ```
 
+Each layer is a field-level patch (RFC 7396): a key absent from a layer inherits
+the layer below, `null` clears it back to the L0 default, and a value sets it.
 The remote section is authoritative when present. On every run the worker starts
-from the constructor/default baseline and re-applies the local file and remote
-source from scratch.
+from the L0 baseline, seeds the L1 bootstrap, and re-applies the local file and
+remote source from scratch.
 
 ## `config:*` commands
 

@@ -64,7 +64,7 @@ VOLUME ["/config"]
 ### Build
 
 ```bash
-podman build --build-arg VERSION=1.1.0 -t scietex-modbus-service .
+podman build --build-arg VERSION=2.0.0 -t scietex-modbus-service .
 ```
 
 `build_image.sh` builds a multi-arch manifest (`linux/amd64,linux/arm64`) and
@@ -125,12 +125,15 @@ there so configuration survives container replacement:
 The service writes its files under `/config/modbus/`:
 
 ```
-/config/modbus/modbus.yml    # service bootstrap
-/config/modbus/config.yml    # framework snapshot (remote config)
+/config/modbus/modbus.yml    # L1 bootstrap patch (service-owned)
+/config/modbus/config.yml    # L2 snapshot (framework-owned)
 ```
 
 On first run, `modbus.yml` is created with defaults. Edit it on the host and
-restart the container to apply changes. See [Configuration](configuration.md).
+restart the container to apply changes. The framework's `config.yml` snapshot is
+written automatically after a successful remote apply and overlays the bootstrap
+on the next start; the remote `modbus` section (L3) overlays both. See
+[Configuration](configuration.md).
 
 ## Health and shutdown
 

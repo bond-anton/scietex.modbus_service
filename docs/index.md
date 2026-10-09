@@ -31,9 +31,10 @@ Modbus/TCP client ──▶ GatewayTcpServer ──▶ ModbusGateway ──▶ s
 
 `ModbusWorker` is a `ValkeyWorker` subclass. It owns a `ModbusGateway` and a
 `GatewayTcpServer`, both from `scietex.hal.serial`. The worker's job is
-lifecycle and configuration: it loads `modbus.yml`, lets the framework apply its
-local and remote config, converts the effective settings into a `GatewayConfig`,
-and starts the gateway.
+lifecycle and configuration: the framework seeds the L0+L1 layers (running the
+`modbus.yml` bootstrap provider) and applies its local and remote config, the
+worker reads the merged settings, converts them into a `GatewayConfig`, and
+starts the gateway.
 
 The gateway core is documented in the
 [`scietex.hal.serial` gateway guide](https://scietex-hal-serial.readthedocs.io/en/latest/guide/gateway/).

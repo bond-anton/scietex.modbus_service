@@ -2,6 +2,7 @@
 
 from .config import (
     MODBUS_SECTION,
+    MODBUS_SETTINGS_DEFAULTS,
     ModbusDeviceSettings,
     ModbusSerialSettings,
     ModbusServiceSettings,
@@ -15,6 +16,7 @@ __all__ = [
     "__version__",
     "ModbusWorker",
     "MODBUS_SECTION",
+    "MODBUS_SETTINGS_DEFAULTS",
     "ModbusDeviceSettings",
     "ModbusSerialSettings",
     "ModbusServiceSettings",

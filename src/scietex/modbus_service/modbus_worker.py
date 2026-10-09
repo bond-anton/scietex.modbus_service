@@ -8,20 +8,31 @@ settings but never live-rebuilds the gateway, because reopening the serial bus
 and rebinding the TCP listener on a running worker is unsafe.
 """
 
+from typing import cast
+
 from scietex.hal.serial import GatewayConfigError, GatewayTcpServer, ModbusGateway
 from scietex.hal.serial.config import SerialConnectionConfigError
 from scietex.service import ValkeyWorker, ValkeyWorkerConfig
 
-from .config import MODBUS_SECTION, ModbusServiceSettings, read_modbus_config, to_gateway_config
+from .config import (
+    MODBUS_SECTION,
+    MODBUS_SETTINGS_DEFAULTS,
+    ModbusServiceSettings,
+    read_modbus_config,
+    to_gateway_config,
+)
 
 
 class ModbusWorker(ValkeyWorker):
     """A `ValkeyWorker` that runs a serial<->TCP Modbus gateway.
 
-    Settings precedence: constructor default < ``modbus.yml`` < framework
-    ``config.yml`` / remote ``modbus`` section. The gateway is built from the
-    effective settings after the framework applies its local and remote config,
-    so the remote section's apply hook runs before gateway construction.
+    Settings resolve through the framework's four-layer merge: constructor
+    default (L0) < ``modbus.yml`` bootstrap patch (L1) < framework ``config.yml``
+    snapshot (L2) < remote ``modbus`` section (L3). Each layer is a field-level
+    patch — a key absent from a layer inherits the layer below, ``null`` clears
+    it back to the L0 default, and a value sets it. The gateway is built from the
+    merged settings after the framework seeds L0+L1 and applies L2/L3, so the
+    remote section's apply hook runs before gateway construction.
     """
 
     def __init__(self, config: ValkeyWorkerConfig | None = None, *, client_factory=None, theme=None) -> None:
@@ -29,7 +40,13 @@ class ModbusWorker(ValkeyWorker):
         self._settings: ModbusServiceSettings | None = None
         self._gateway: ModbusGateway | None = None
         self._tcp_server: GatewayTcpServer | None = None
-        self.register_config_settings(MODBUS_SECTION, ModbusServiceSettings, apply=self._apply_modbus_settings)
+        self.register_config_settings(
+            MODBUS_SECTION,
+            ModbusServiceSettings,
+            apply=self._apply_modbus_settings,
+            defaults=MODBUS_SETTINGS_DEFAULTS,
+            bootstrap=lambda: read_modbus_config(self.conf_dir),
+        )
 
     @property
     def gateway(self) -> ModbusGateway | None:
@@ -47,31 +64,30 @@ class ModbusWorker(ValkeyWorker):
         return self._settings
 
     async def initialize(self) -> bool:
-        """Load settings, initialize the framework, then build and start the gateway.
+        """Initialize the framework, then build and start the gateway.
 
-        The gateway is built after `super().initialize()` so the remote config
-        apply (which runs the ``modbus`` section hook) has already updated
-        ``self._settings`` before the conversion seam reads it. Both the gateway
-        and TCP server references are assigned before either is started, so a
-        mid-start failure still leaves them reachable by `_stop_gateway`.
+        `super().initialize()` seeds the L0+L1 layers (running the ``modbus.yml``
+        bootstrap provider) and applies the L2/L3 layers, so the merged settings
+        are read back via `current_config_settings` afterwards. A bootstrap
+        failure is swallowed by the framework's seeder and surfaces only as an
+        unresolved section, so the ``None`` guard below is the failure path. Both
+        the gateway and TCP server references are assigned before either is
+        started, so a mid-start failure still leaves them reachable by
+        `_stop_gateway`.
 
         Returns:
             `True` if the framework initialized and the gateway started;
             `False` on any configuration or startup failure.
         """
-        try:
-            self._settings = read_modbus_config(self.conf_dir)
-        except RuntimeError as exc:
-            self.logger.error("Failed to load Modbus configuration: %s", exc)
-            return False
-
         if not await super().initialize():
             return False
 
-        settings = self._settings
-        if settings is None:
+        resolved = self.current_config_settings(MODBUS_SECTION)
+        if resolved is None:
             self.logger.error("Modbus settings were not resolved before gateway startup")
             return False
+        settings = cast(ModbusServiceSettings, resolved)
+        self._settings = settings
 
         try:
             gw_config = to_gateway_config(settings)

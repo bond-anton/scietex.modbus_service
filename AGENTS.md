@@ -1,9 +1,8 @@
 # AGENTS.md
 
-`scietex.modbus_service` — a `scietex.service` v5 Valkey worker that runs the
+`scietex.modbus_service` — a `scietex.service` v6 Valkey worker that runs the
 serial<->TCP Modbus gateway from `scietex.hal.serial`. Python, `src/` layout,
-namespace package. The repo was reset to a skeleton before v1; the `0.1` branch
-is a frozen snapshot of the pre-v1 code.
+namespace package. The `0.1` branch is a frozen snapshot of the pre-v1 code.
 
 ## Commands
 
@@ -46,20 +45,24 @@ then `uv run pytest`. Order matters: **lint -> type -> test**.
 
 - `src/scietex/modbus_service/` is the package root; `scietex/` is an
   **implicit namespace package** (no `__init__.py`). Do not add one.
-- Five modules: `config` (msgspec settings + `read_modbus_config` + the
-  `to_gateway_config` conversion seam), `modbus_worker` (`ModbusWorker`),
-  `run_worker` (CLI entry point), `version`, `__init__` (public exports).
+- Five modules: `config` (msgspec settings + `MODBUS_SETTINGS_DEFAULTS` L0 base +
+  `read_modbus_config` L1 patch loader + the `to_gateway_config` conversion seam),
+  `modbus_worker` (`ModbusWorker`), `run_worker` (CLI entry point), `version`,
+  `__init__` (public exports).
 - `ModbusWorker(ValkeyWorker)` owns a `ModbusGateway` + `GatewayTcpServer`.
-  `initialize()` order is load `modbus.yml` -> `super().initialize()` (framework
-  config/remote apply) -> convert -> build -> start. The gateway is built
-  **after** `super().initialize()` so the remote `modbus` section hook has
-  already updated `self._settings`.
+  `initialize()` order is `super().initialize()` (framework seeds L0+L1 and
+  applies L2/L3) -> read merged via `current_config_settings` -> convert -> build
+  -> start. The gateway is built **after** `super().initialize()` so the remote
+  `modbus` section hook has already updated `self._settings`. A bootstrap failure
+  is swallowed by the framework's seeder and surfaces only as an unresolved
+  section, so the `None` guard is the failure path.
 - The remote-config `modbus` section is **declarative / restart-required**:
   applying it validates and stores settings but never live-rebuilds the gateway
   (serial port + TCP listener are process-lifetime resources). `config:store`
   persists to the framework snapshot, not to `modbus.yml`.
-- Settings precedence: constructor default < `modbus.yml` < framework
-  `config.yml` / remote `modbus` section.
+- Settings precedence: constructor default (L0) < `modbus.yml` (L1) < framework
+  `config.yml` (L2) < remote `modbus` section (L3). Each layer is a field-level
+  patch (RFC 7396): absent = inherit, `null` = clear to L0, value = set.
 - `scietex.hal.serial` does **no** file I/O or config-dir resolution — config
   provisioning is this service's job. The gateway's serial-level `framer` is
   dead (the gateway uses `GatewayConfig.default_framer`), so the service schema
@@ -71,8 +74,8 @@ then `uv run pytest`. Order matters: **lint -> type -> test**.
 ## Configuration & deployment
 
 - Config is namespaced under `<conf_dir>/modbus/` so services sharing the
-  framework's single config dir cannot collide: `modbus.yml` (service-owned
-  bootstrap) and `config.yml` (framework snapshot, via
+  framework's single config dir cannot collide: `modbus.yml` (service-owned L1
+  bootstrap patch) and `config.yml` (framework L2 snapshot, via
   `config_file="modbus/config.yml"`). `MODBUS_CONFIG_SUBDIR` in `config.py` is
   the single source of truth for the subdir name.
 - `conf_dir` resolution is the framework's `prepare_conf_dir` (arg ->
@@ -105,5 +108,5 @@ then `uv run pytest`. Order matters: **lint -> type -> test**.
 - `build/lib/` is a **stale** build artifact containing an old package layout
   (`schemas/`, `handlers/`) that no longer exists in `src/`. Ignore it; never
   edit it. It is git-ignored.
-- `README.md` is a one-line stub; the real documentation lives in the sibling
-  repos' `AGENTS.md` and `docs/`.
+- `README.md` is the user-facing entry point; `docs/` holds the detailed pages;
+  this `AGENTS.md` holds repo conventions.
