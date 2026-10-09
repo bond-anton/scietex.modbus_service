@@ -104,7 +104,7 @@ A `Containerfile` is included. It installs the released package from PyPI
 `dialout` group, mounts `/config`, and sets `SCIETEX_CONFIG_DIR=/config`:
 
 ```bash
-podman build --build-arg VERSION=2.0.0 -t scietex-modbus-service .
+podman build --build-arg VERSION=2.1.0 -t scietex-modbus-service .
 podman run --rm \
   --device /dev/ttyUSB0 \
   --cap-add NET_BIND_SERVICE \

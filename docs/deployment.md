@@ -64,7 +64,7 @@ VOLUME ["/config"]
 ### Build
 
 ```bash
-podman build --build-arg VERSION=2.0.0 -t scietex-modbus-service .
+podman build --build-arg VERSION=2.1.0 -t scietex-modbus-service .
 ```
 
 `build_image.sh` builds a multi-arch manifest (`linux/amd64,linux/arm64`) and
