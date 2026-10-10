@@ -270,7 +270,7 @@ def test_apply_hook_updates_settings_and_warns_on_running_gateway(tmp_path, capl
     """The apply hook stores settings and warns (no rebuild) when the gateway is up."""
     worker = _make_worker(tmp_path)
     worker._gateway = object()  # the hook only checks non-None; no methods are called
-    settings = ModbusServiceSettings()
+    settings = ModbusServiceSettings(port=5020)
 
     worker._apply_modbus_settings(settings)
 
@@ -278,8 +278,8 @@ def test_apply_hook_updates_settings_and_warns_on_running_gateway(tmp_path, capl
     assert any("restart required" in record.message for record in caplog.records)
 
 
-def test_apply_hook_logs_info_when_gateway_not_started(tmp_path, caplog) -> None:
-    """Before startup the apply hook stores settings and logs the startup path."""
+def test_apply_hook_logs_waiting_when_port_unset(tmp_path, caplog) -> None:
+    """An unconfigured delivery is stored and logged as waiting."""
     worker = _make_worker(tmp_path)
     settings = ModbusServiceSettings()
 
@@ -287,7 +287,98 @@ def test_apply_hook_logs_info_when_gateway_not_started(tmp_path, caplog) -> None
         worker._apply_modbus_settings(settings)
 
     assert worker.modbus_settings is settings
+    assert any("waiting for remote configuration" in record.message for record in caplog.records)
+
+
+def test_apply_hook_stores_settings_before_startup(tmp_path, caplog) -> None:
+    """Before startup the apply hook stores settings without live-building."""
+    worker = _make_worker(tmp_path)
+    settings = ModbusServiceSettings(port=5020)
+
+    with caplog.at_level(logging.INFO):
+        worker._apply_modbus_settings(settings)
+
+    assert worker.modbus_settings is settings
+    assert worker.gateway is None
+    assert worker._pending_build is None
     assert any("Stored Modbus settings" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_initialize_waits_when_unconfigured(tmp_path, monkeypatch, caplog) -> None:
+    """Without a delivered port, initialize returns True with no gateway built."""
+
+    async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+    worker = _make_worker(tmp_path)
+
+    with caplog.at_level(logging.INFO):
+        assert await worker.initialize() is True
+
+    assert worker.gateway is None
+    assert worker.tcp_server is None
+    assert worker.modbus_settings is not None
+    assert worker.modbus_settings.port is None
+    assert any("waiting for remote configuration" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_initialize_does_not_build_gateway_when_unconfigured(tmp_path, monkeypatch) -> None:
+    """to_gateway_config is never called while the port is unset."""
+
+    async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
+        return True
+
+    def boom(settings):
+        raise AssertionError("to_gateway_config must not be called when port is None")
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+    monkeypatch.setattr("scietex.modbus_service.modbus_worker.to_gateway_config", boom)
+    worker = _make_worker(tmp_path)
+
+    assert await worker.initialize() is True
+    assert worker.gateway is None
+
+
+@pytest.mark.asyncio
+async def test_apply_hook_live_builds_waiting_worker(tmp_path, monkeypatch, caplog) -> None:
+    """A config delivery on a waiting worker live-builds the gateway.
+
+    The worker starts unconfigured (the bootstrap leaves ``port`` unset), so
+    ``initialize`` returns with no gateway. Applying a configured ``modbus``
+    section then schedules the live build, which the test awaits.
+    """
+
+    async def fake_initialize(self) -> bool:
+        self.seed_config_bootstrap()
+        return True
+
+    monkeypatch.setattr(ValkeyWorker, "initialize", fake_initialize)
+    worker = _make_worker(tmp_path)
+
+    assert await worker.initialize() is True
+    assert worker.gateway is None
+
+    settings = ModbusServiceSettings(
+        host="127.0.0.1",
+        port=_free_port(),
+        serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
+        devices={1: ModbusDeviceSettings(framer="RTU")},
+    )
+    with caplog.at_level(logging.INFO):
+        worker._apply_modbus_settings(settings)
+
+    assert worker._pending_build is not None
+    assert await worker._pending_build is True
+
+    assert worker.gateway is not None
+    assert worker.tcp_server is not None
+    assert any("starting the gateway" in record.message for record in caplog.records)
+    await worker.cleanup()
 
 
 @pytest.mark.asyncio
@@ -414,4 +505,4 @@ def test_bootstrap_provider_returns_patch_dict(tmp_path, monkeypatch) -> None:
     assert isinstance(resolved, ModbusServiceSettings)
     assert resolved.port == 5020
     assert resolved.host == "0.0.0.0"
-    assert MODBUS_SETTINGS_DEFAULTS.port == 502
+    assert MODBUS_SETTINGS_DEFAULTS.port is None

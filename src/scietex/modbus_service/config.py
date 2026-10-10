@@ -18,7 +18,7 @@ path — the two are unrelated and must not be conflated.
 from pathlib import Path
 
 import msgspec
-from scietex.hal.serial import GatewayConfig, GatewayDeviceConfig, ModbusSerialConnectionConfig
+from scietex.hal.serial import GatewayConfig, GatewayConfigError, GatewayDeviceConfig, ModbusSerialConnectionConfig
 from scietex.hal.serial.config.defaults import (
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
@@ -76,11 +76,15 @@ class ModbusServiceSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     ``port`` is the TCP listen port; ``serial.port`` is the device path. Device
     entries are keyed by device id so the key becomes the `device_id` when
     converted to `GatewayDeviceConfig` objects.
+
+    ``port`` defaults to ``None`` (not configured): the worker then stays up
+    with no gateway and waits for a remote configuration delivery instead of
+    binding a default port.
     """
 
     serial: ModbusSerialSettings = ModbusSerialSettings()
     host: str = "0.0.0.0"
-    port: int = 502
+    port: int | None = None
     default_framer: str = "RTU"
     devices: dict[int, ModbusDeviceSettings] = msgspec.field(default_factory=dict)
     allow_unknown_devices: bool = False
@@ -166,12 +170,21 @@ def to_gateway_config(settings: ModbusServiceSettings) -> GatewayConfig:
     `GatewayConfig.__post_init__`, so `GatewayConfigError` and
     `SerialConnectionConfigError` propagate unchanged to the caller.
 
+    The caller must only invoke this when ``settings.port is not None``:
+    `GatewayConfig.port` is a strict ``int`` and an unconfigured port (``None``)
+    has no listener to build. A ``None`` port raises `GatewayConfigError`.
+
     Args:
         settings: The service settings to convert.
 
     Returns:
         A `GatewayConfig` ready for `ModbusGateway`.
+
+    Raises:
+        GatewayConfigError: If ``settings.port is None``.
     """
+    if settings.port is None:
+        raise GatewayConfigError("Cannot build a gateway config: settings.port is None (no TCP listener to bind)")
     serial = ModbusSerialConnectionConfig(
         port=settings.serial.port,
         baudrate=settings.serial.baudrate,

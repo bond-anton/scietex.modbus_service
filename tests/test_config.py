@@ -106,16 +106,21 @@ def test_read_modbus_config_missing_without_create_raises(tmp_path: Path) -> Non
     assert not _config_path(tmp_path).exists()
 
 
+def test_port_defaults_to_none() -> None:
+    """The TCP listen port is unset by default; the worker waits for config."""
+    assert ModbusServiceSettings().port is None
+
+
 def test_to_gateway_config_device_id_from_dict_key() -> None:
     """The device id is derived from the dict key, not a field."""
-    config = to_gateway_config(ModbusServiceSettings(devices={7: ModbusDeviceSettings()}))
+    config = to_gateway_config(ModbusServiceSettings(port=5020, devices={7: ModbusDeviceSettings()}))
 
     assert config.devices[7].device_id == 7
 
 
 def test_to_gateway_config_invalid_device_id_raises() -> None:
     """An out-of-range device id is delegated to GatewayConfig and raises."""
-    settings = ModbusServiceSettings(devices={300: ModbusDeviceSettings()})
+    settings = ModbusServiceSettings(port=5020, devices={300: ModbusDeviceSettings()})
 
     with pytest.raises(GatewayConfigError):
         to_gateway_config(settings)
@@ -123,7 +128,7 @@ def test_to_gateway_config_invalid_device_id_raises() -> None:
 
 def test_to_gateway_config_bad_dotted_path_raises() -> None:
     """An unresolvable plugin path is delegated to GatewayConfig and raises."""
-    settings = ModbusServiceSettings(devices={1: ModbusDeviceSettings(translator="no.such.module.Translator")})
+    settings = ModbusServiceSettings(port=5020, devices={1: ModbusDeviceSettings(translator="no.such.module.Translator")})
 
     with pytest.raises(GatewayConfigError):
         to_gateway_config(settings)
