@@ -19,7 +19,7 @@ from scietex.hal.serial.server.rs485_server import (
     RS485Server,
 )
 from scietex.hal.serial.virtual import VirtualSerialPair
-from scietex.service import ValkeyWorker, ValkeyWorkerConfig
+from scietex.service import TaskProcessor, ValkeyWorker, ValkeyWorkerConfig
 from scietex.service.config_reload import (
     CONFIG_SOURCE_UNAVAILABLE,
     ConfigApplyOutcome,
@@ -323,6 +323,20 @@ async def test_initialize_waits_when_unconfigured(tmp_path, monkeypatch, caplog)
     assert worker.modbus_settings is not None
     assert worker.modbus_settings.port is None
     assert any("waiting for remote configuration" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_serial_list_handler_registered_after_initialize(tmp_path) -> None:
+    """The worker registers the serial:list data-lane handler on startup.
+
+    Runs the base ``TaskProcessor.initialize`` (which starts every registered
+    handler) rather than the Valkey override, so no live client is needed.
+    """
+    worker = _make_worker(tmp_path)
+
+    assert await TaskProcessor.initialize(worker) is True
+    assert "SerialListHandler" in worker.task_handlers
+    assert "SerialListHandler" not in worker.control_task_handlers
 
 
 @pytest.mark.asyncio
