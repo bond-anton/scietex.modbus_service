@@ -306,31 +306,10 @@ broken.
 
 ## Quadlet reference
 
-`~/.config/containers/systemd/modbus-service.container`:
-
-```ini
-[Unit]
-Description=Modbus Service Container
-Requires=valkey.service
-After=valkey.service
-
-[Container]
-ContainerName=modbus-service
-Image=registry.buro-nts.ru/scietex-modbus-service:latest
-UserNS=keep-id
-# Preserve the host's supplementary groups (notably dialout, which owns the
-# USB-serial device nodes) so the container user can open them.
-GroupAdd=keep-groups
-Volume=%h/.config/scietex:/config:Z
-Volume=%h/.config/scietex-modbus-container/valkey.yml:/config/valkey.yml:Z
-PublishPort=15020:15020
-# AddDevice= lines are generated into modbus-service.container.d/10-devices.conf
-# by scietex-modbus-devices-sync.
-AutoUpdate=registry
-
-[Install]
-WantedBy=multi-user.target default.target
-```
+The base `modbus-service.container` Quadlet lives in
+[Deployment](deployment.md#quadlet-systemd). The hotplug drop-in above
+(`modbus-service.container.d/10-devices.conf`) extends it with the `AddDevice=`
+and `/dev/scietex-serial` bind-mount lines.
 
 ## Troubleshooting
 

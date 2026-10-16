@@ -83,6 +83,50 @@ podman run --rm \
   scietex-modbus-service
 ```
 
+### Quadlet (systemd)
+
+For a persistent deployment, run the container as a rootless systemd user
+service via a Quadlet. `~/.config/containers/systemd/modbus-service.container`:
+
+```ini
+[Unit]
+Description=Modbus Service Container
+Requires=valkey.service
+After=valkey.service
+
+[Container]
+ContainerName=modbus-service
+Image=registry.buro-nts.ru/scietex-modbus-service:latest
+UserNS=keep-id
+# Preserve the host's supplementary groups (notably dialout, which owns the
+# USB-serial device nodes) so the container user can open them.
+GroupAdd=keep-groups
+Volume=%h/.config/scietex:/config:Z
+Volume=%h/.config/scietex-modbus-container/valkey.yml:/config/valkey.yml:Z
+PublishPort=15020:15020
+# AddDevice= lines are generated into modbus-service.container.d/10-devices.conf
+# by scietex-modbus-devices-sync.
+AutoUpdate=registry
+
+[Install]
+WantedBy=multi-user.target default.target
+```
+
+Reload and start it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user start modbus-service.service
+```
+
+`UserNS=keep-id` maps the host user to the container user; `GroupAdd=keep-groups`
+preserves the host's supplementary groups so the container can open the
+`dialout`-owned serial device. `AutoUpdate=registry` pulls a newer image on
+restart. The `AddDevice=` lines are not written by hand — a hotplug helper
+regenerates them from the present `/dev/scietex-serial/` symlinks. See
+[Serial device access](serial-devices.md) for the device sync script, the path
+unit, and the SELinux and group requirements.
+
 ## Serial device access
 
 The container runs as `appuser`, which is a member of the `dialout` group

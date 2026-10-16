@@ -44,7 +44,7 @@ The gateway core is documented in the
 | Page | Contents |
 | --- | --- |
 | [Configuration](configuration.md) | The `modbus.yml` schema, defaults, and precedence |
-| [Deployment](deployment.md) | Container, port 502, environment variables |
+| [Deployment](deployment.md) | Container, Quadlet, port 502, environment variables |
 | [Serial device access](serial-devices.md) | Static UART, USB adapters, hotplug, SELinux, container access |
 | [Remote configuration](remote-config.md) | The declarative `modbus` section and `config:*` commands |
 
