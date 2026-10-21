@@ -7,6 +7,16 @@ FROM python:3.14-slim-trixie  as builder
 # and the PyPI artifact always match.
 ARG VERSION
 
+# Comma-separated optional extras to install alongside the core service, e.g.
+# "vacuum-gauge" for the Thyracont/Erstevak RS485 translators. Empty by default
+# so the core image stays vendor-agnostic.
+ARG EXTRAS=""
+
+# Plugin packages to install directly, space-separated. Needed when the released
+# wheel predates the extra (pip ignores an unknown extra silently), so the image
+# can still carry the plugin. Empty by default.
+ARG PLUGINS=""
+
 WORKDIR /app
 
 # Install system dependencies (required for some Python packages)
@@ -27,7 +37,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 # extension per supported interpreter (cp39..cp314, pypy) while only the running
 # interpreter's is ever loaded.
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir "scietex.modbus_service==${VERSION}" && \
+    pip install --no-cache-dir "scietex.modbus_service[${EXTRAS}]==${VERSION}" && \
+    if [ -n "${PLUGINS}" ]; then pip install --no-cache-dir ${PLUGINS}; fi && \
     pip uninstall -y pip setuptools wheel && \
     find /opt/venv -name '*.pyc' -delete && \
     find /opt/venv -name '__pycache__' -type d -prune -exec rm -rf {} + && \
