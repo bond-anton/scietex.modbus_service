@@ -38,6 +38,8 @@ main() {
     local image="registry.buro-nts.ru/scietex-modbus-service"
     local temp_manifest="${image}:build-temp"
     local push_latest=false
+    local extras=""
+    local plugins=""
 
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
@@ -45,6 +47,14 @@ main() {
             --latest)
                 push_latest=true
                 shift
+                ;;
+            --extras)
+                extras="$2"
+                shift 2
+                ;;
+            --plugins)
+                plugins="$2"
+                shift 2
                 ;;
             *)
                 echo "Unknown option: $1" >&2
@@ -61,8 +71,13 @@ main() {
     echo "Building multi-arch image version ${version}..."
 
     # Build the multi-architecture image. VERSION selects the published wheel to
-    # install, so the image matches the PyPI artifact for this version.
-    if ! podman build --platform linux/amd64,linux/arm64 --build-arg "VERSION=${version}" --manifest "${temp_manifest}" .; then
+    # install, so the image matches the PyPI artifact for this version. EXTRAS and
+    # PLUGINS carry the vendor protocol plugins; both default to empty.
+    if ! podman build --platform linux/amd64,linux/arm64 \
+        --build-arg "VERSION=${version}" \
+        --build-arg "EXTRAS=${extras}" \
+        --build-arg "PLUGINS=${plugins}" \
+        --manifest "${temp_manifest}" .; then
         echo "Error: Build failed" >&2
         return 1
     fi
