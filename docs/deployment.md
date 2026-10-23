@@ -104,6 +104,10 @@ GroupAdd=keep-groups
 Volume=%h/.config/scietex:/config:z
 Volume=%h/.config/scietex-modbus-container/valkey.yml:/config/valkey.yml:Z
 PublishPort=15020:15020
+# The gateway binds the Modbus/TCP port from the applied config, which defaults
+# to 502 (privileged). Without this capability the worker fails to start with
+# EACCES on bind. Drop it only if the configured port is >= 1024.
+AddCapability=NET_BIND_SERVICE
 # AddDevice= lines are generated into modbus-service.container.d/10-devices.conf
 # by scietex-modbus-devices-sync.
 AutoUpdate=registry
@@ -187,7 +191,8 @@ one of:
   with `-p 502:5020`.
 
 The `Containerfile` does **not** grant the capability by default; the operator
-chooses at run time.
+chooses at run time. The Quadlet example above grants it, because the default
+applied config binds 502.
 
 ## Config volume
 
@@ -210,6 +215,12 @@ restart the container to apply changes. The framework's `config.yml` snapshot is
 written automatically after a successful remote apply and overlays the bootstrap
 on the next start; the remote `modbus` section (L3) overlays both. See
 [Configuration](configuration.md).
+
+The worker's heartbeat reports which layer last applied the effective config
+(`config_source`, `config_revision`, `config_hash`), so the API can show whether
+a running gateway is on its local `config.yml` snapshot rather than the remote
+delivery. This requires `scietex.service >= 6.2.0`; an older framework omits the
+fields and the API reports the provenance as unavailable.
 
 ## Health and shutdown
 
