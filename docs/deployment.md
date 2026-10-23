@@ -101,7 +101,7 @@ UserNS=keep-id
 # Preserve the host's supplementary groups (notably dialout, which owns the
 # USB-serial device nodes) so the container user can open them.
 GroupAdd=keep-groups
-Volume=%h/.config/scietex:/config:Z
+Volume=%h/.config/scietex:/config:z
 Volume=%h/.config/scietex-modbus-container/valkey.yml:/config/valkey.yml:Z
 PublishPort=15020:15020
 # AddDevice= lines are generated into modbus-service.container.d/10-devices.conf
@@ -126,6 +126,38 @@ restart. The `AddDevice=` lines are not written by hand — a hotplug helper
 regenerates them from the present `/dev/scietex-serial/` symlinks. See
 [Serial device access](serial-devices.md) for the device sync script, the path
 unit, and the SELinux and group requirements.
+
+#### Shared config dir: `:z`, not `:Z`
+
+The `~/.config/scietex` mount uses `:z` (shared), while the per-container
+`valkey.yml` overlay uses `:Z` (private). This distinction matters on
+SELinux-enforcing hosts when more than one container mounts the same tree.
+
+`:Z` assigns the source a **private** MCS category — a unique `s0:cN,cM` pair
+per container. When two quadlets both mount `~/.config/scietex` with `:Z`, each
+start relabels the directory to its own category and the other container loses
+access to its own config. The failure is silent at the unit level: the service
+starts, then dies inside with
+
+```
+PermissionError: [Errno 13] Permission denied: '/config/valkey.yml'
+ERR - Failed to seed bootstrap for section 'modbus': Failed to create configuration directory /config/modbus!
+```
+
+Whichever container started last wins; the other is locked out until the next
+restart flips it back. `:z` assigns `container_file_t` with **no** MCS category,
+so every container mounting the tree can read it regardless of its own category.
+
+Use `:Z` only for a path mounted by exactly one container — the `valkey.yml`
+overlay qualifies, the shared config tree does not. If you add another service
+that mounts `~/.config/scietex`, give it `:z` too.
+
+Verify the labels after a restart:
+
+```bash
+ls -Zd ~/.config/scietex                      # expect container_file_t:s0 (no cN,cM)
+podman exec modbus-service ls /config/valkey.yml
+```
 
 ## Serial device access
 
