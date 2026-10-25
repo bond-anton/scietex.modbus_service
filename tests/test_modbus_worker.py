@@ -340,6 +340,16 @@ async def test_serial_list_handler_registered_after_initialize(tmp_path) -> None
 
 
 @pytest.mark.asyncio
+async def test_drivers_list_handler_registered_after_initialize(tmp_path) -> None:
+    """The worker registers the drivers:list control-lane handler on startup."""
+    worker = _make_worker(tmp_path)
+
+    assert await TaskProcessor.initialize(worker) is True
+    assert "DriversListHandler" in worker.control_task_handlers
+    assert "DriversListHandler" not in worker.task_handlers
+
+
+@pytest.mark.asyncio
 async def test_initialize_does_not_build_gateway_when_unconfigured(tmp_path, monkeypatch) -> None:
     """to_gateway_config is never called while the port is unset."""
 

@@ -36,7 +36,7 @@ from .config import (
     read_modbus_config,
     to_gateway_config,
 )
-from .task_handlers import SerialListHandler
+from .task_handlers import DriversListHandler, SerialListHandler
 from .telemetry import TELEMETRY_INTERVAL, TELEMETRY_TTL, build_telemetry
 
 
@@ -86,6 +86,9 @@ class ModbusWorker(ValkeyWorker):
         # Data-lane handler for on-demand serial-port enumeration; the UI
         # submits ``serial:list`` when the operator opens the port picker.
         self.add_task_handler(SerialListHandler)
+        # Control-lane handler reporting which drivers this worker can resolve;
+        # the API asks when the operator opens the driver picker.
+        self.add_task_handler(DriversListHandler)
 
     @property
     def gateway(self) -> ModbusGateway | None:
