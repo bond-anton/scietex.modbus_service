@@ -138,3 +138,24 @@ def test_serial_settings_has_no_framer_field() -> None:
     """The serial framer is dead at the gateway, so it must not be settable."""
     with pytest.raises(msgspec.ValidationError):
         msgspec.convert({"framer": "RTU"}, type=ModbusSerialSettings)
+
+
+def test_to_gateway_config_wires_circuit_breaker() -> None:
+    """The circuit breaker settings are converted into the gateway config."""
+    settings = msgspec.convert(
+        {"port": 5020, "circuit_breaker": {"failure_threshold": 5, "cooldown": 10.0}},
+        ModbusServiceSettings,
+    )
+
+    config = to_gateway_config(settings)
+
+    assert config.circuit_breaker.failure_threshold == 5
+    assert config.circuit_breaker.cooldown == 10.0
+
+
+def test_circuit_breaker_defaults() -> None:
+    """The breaker defaults to 3 failures and a 30 s cooldown."""
+    config = to_gateway_config(ModbusServiceSettings(port=5020))
+
+    assert config.circuit_breaker.failure_threshold == 3
+    assert config.circuit_breaker.cooldown == 30.0
