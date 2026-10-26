@@ -18,7 +18,13 @@ path — the two are unrelated and must not be conflated.
 from pathlib import Path
 
 import msgspec
-from scietex.hal.serial import GatewayConfig, GatewayConfigError, GatewayDeviceConfig, ModbusSerialConnectionConfig
+from scietex.hal.serial import (
+    GatewayCircuitBreakerConfig,
+    GatewayConfig,
+    GatewayConfigError,
+    GatewayDeviceConfig,
+    ModbusSerialConnectionConfig,
+)
 from scietex.hal.serial.config.defaults import (
     DEFAULT_BAUDRATE,
     DEFAULT_BYTESIZE,
@@ -70,6 +76,17 @@ class ModbusSerialSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=Tr
     timeout: float | None = DEFAULT_TIMEOUT
 
 
+class ModbusCircuitBreakerSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
+    """Per-device circuit breaker settings.
+
+    ``failure_threshold`` consecutive failures open the circuit for
+    ``cooldown`` seconds; ``0`` disables the breaker.
+    """
+
+    failure_threshold: int = 3
+    cooldown: float = 30.0
+
+
 class ModbusServiceSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=True):
     """Top-level Modbus gateway settings.
 
@@ -89,6 +106,7 @@ class ModbusServiceSettings(msgspec.Struct, frozen=True, forbid_unknown_fields=T
     devices: dict[int, ModbusDeviceSettings] = msgspec.field(default_factory=dict)
     allow_unknown_devices: bool = False
     bus_retries: int = 0
+    circuit_breaker: ModbusCircuitBreakerSettings = msgspec.field(default_factory=ModbusCircuitBreakerSettings)
 
 
 #: Concrete L0 base for the framework's layered merge. A field absent from every
@@ -211,4 +229,8 @@ def to_gateway_config(settings: ModbusServiceSettings) -> GatewayConfig:
         devices=devices,
         allow_unknown_devices=settings.allow_unknown_devices,
         bus_retries=settings.bus_retries,
+        circuit_breaker=GatewayCircuitBreakerConfig(
+            failure_threshold=settings.circuit_breaker.failure_threshold,
+            cooldown=settings.circuit_breaker.cooldown,
+        ),
     )
