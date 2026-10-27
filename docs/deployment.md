@@ -17,7 +17,7 @@ It accepts three flags:
 | Flag | Default | Meaning |
 | --- | --- | --- |
 | `--conf-dir` | auto-resolved | Configuration directory |
-| `--service-name` | `$SCIETEX_SERVICE_NAME` or `ModbusService` | Service name reported to the framework |
+| `--service-name` | `$SCIETEX_SERVICE_NAME` or `ModbusGateway` | Service name reported to the framework |
 | `--logging-level` | `$SCIETEX_LOGGING_LEVEL` or `INFO` | Logging level |
 
 Precedence is **CLI flag > environment variable > built-in default**. The
@@ -33,7 +33,7 @@ no extra wiring is needed.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `SCIETEX_CONFIG_DIR` | Config-directory candidate (used if set and an existing dir) | unset |
-| `SCIETEX_SERVICE_NAME` | Fallback for `--service-name` | `ModbusService` |
+| `SCIETEX_SERVICE_NAME` | Fallback for `--service-name` | `ModbusGateway` |
 | `SCIETEX_LOGGING_LEVEL` | Fallback for `--logging-level` | `INFO` |
 | `XDG_CONFIG_HOME` | XDG base dir; candidate becomes `$XDG_CONFIG_HOME/scietex` | unset → `~/.config/scietex` |
 
@@ -56,7 +56,7 @@ The image sets these defaults:
 
 ```dockerfile
 ENV SCIETEX_CONFIG_DIR=/config \
-    SCIETEX_SERVICE_NAME=ModbusService \
+    SCIETEX_SERVICE_NAME=ModbusGateway \
     SCIETEX_LOGGING_LEVEL=INFO
 VOLUME ["/config"]
 ```

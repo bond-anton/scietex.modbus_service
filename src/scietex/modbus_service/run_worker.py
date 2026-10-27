@@ -15,7 +15,7 @@ from .version import __version__
 ENV_SERVICE_NAME: str = "SCIETEX_SERVICE_NAME"
 ENV_LOGGING_LEVEL: str = "SCIETEX_LOGGING_LEVEL"
 
-DEFAULT_SERVICE_NAME: str = "ModbusService"
+DEFAULT_SERVICE_NAME: str = "ModbusGateway"
 DEFAULT_LOGGING_LEVEL: str = "INFO"
 
 

@@ -67,7 +67,7 @@ RUN groupadd -g 20 dialout 2>/dev/null || true && \
 # SCIETEX_CONFIG_DIR is honored by the framework's prepare_conf_dir; the service
 # namespaces its files under <config-dir>/modbus/.
 ENV SCIETEX_CONFIG_DIR=/config \
-    SCIETEX_SERVICE_NAME=ModbusService \
+    SCIETEX_SERVICE_NAME=ModbusGateway \
     SCIETEX_LOGGING_LEVEL=INFO
 RUN mkdir -p /config && chown appuser:appuser /config
 VOLUME ["/config"]
