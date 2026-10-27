@@ -61,6 +61,11 @@ class ModbusGatewayTelemetry(msgspec.Struct, frozen=True):
     tcp_port: int | None
     client_count: int
     devices: list[ModbusDeviceTelemetry]
+    #: Bus addresses the gateway actually routes: the keys of
+    #: ``gateway.config.devices``. This is the routing table, not the set of
+    #: observed addresses — an id may be observed (a client addressed it) while
+    #: having no entry here, which is what "unknown address" means.
+    routed: list[int]
     bus: ModbusBusStats
     timestamp: datetime = msgspec.field(default_factory=lambda: datetime.now(timezone.utc))
     schema_version: int = 1
@@ -99,6 +104,7 @@ def build_telemetry(worker: ModbusWorker) -> ModbusGatewayTelemetry:
             tcp_port=None,
             client_count=0,
             devices=[],
+            routed=[],
             bus=ModbusBusStats(0, 0, 0),
         )
 
@@ -124,5 +130,6 @@ def build_telemetry(worker: ModbusWorker) -> ModbusGatewayTelemetry:
         tcp_port=tcp_server.tcp_port if tcp_server is not None else None,
         client_count=tcp_server.client_count if tcp_server is not None else 0,
         devices=devices,
+        routed=sorted(gateway.config.devices),
         bus=ModbusBusStats(metrics.requests, metrics.errors, metrics.retries),
     )

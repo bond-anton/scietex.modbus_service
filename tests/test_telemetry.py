@@ -46,6 +46,7 @@ def test_build_telemetry_unconfigured_worker(tmp_path) -> None:
     assert telemetry.tcp_port is None
     assert telemetry.client_count == 0
     assert telemetry.devices == []
+    assert telemetry.routed == []
     assert telemetry.bus == ModbusBusStats(0, 0, 0)
     assert telemetry.schema_version == 1
 
@@ -72,7 +73,38 @@ async def test_build_telemetry_configured_worker(tmp_path) -> None:
         assert telemetry.tcp_port == settings.port
         assert telemetry.client_count == 0
         assert telemetry.devices == []
+        assert telemetry.routed == [1]
         assert telemetry.bus == ModbusBusStats(0, 0, 0)
+    finally:
+        await worker.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_build_telemetry_reports_routing_table_not_observed_devices(tmp_path) -> None:
+    """``routed`` is the gateway's routing table, not the addresses it served.
+
+    An address can be observed (a client addressed it) while having no entry in
+    the routing table — that is exactly what "unknown address" means, and the
+    API relies on the two sets being reported separately.
+    """
+    worker = _make_worker(tmp_path)
+    settings = ModbusServiceSettings(
+        host="127.0.0.1",
+        port=_free_port(),
+        serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
+        devices={1: ModbusDeviceSettings(framer="RTU"), 3: ModbusDeviceSettings(framer="RTU")},
+    )
+    assert await worker._build_and_start_gateway(settings) is True
+    try:
+        gateway = worker.gateway
+        assert gateway is not None
+        gateway.metrics.record_request(9)
+        gateway.metrics.touch(9)
+
+        telemetry = build_telemetry(worker)
+
+        assert telemetry.routed == [1, 3]
+        assert [device.device_id for device in telemetry.devices] == [9]
     finally:
         await worker.cleanup()
 
