@@ -110,6 +110,41 @@ async def test_build_telemetry_reports_routing_table_not_observed_devices(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_build_telemetry_reports_pending_restart_after_a_late_delivery(tmp_path) -> None:
+    """A setting delivered after the gateway was built is inert until restart.
+
+    The gateway is constructed once and never rebuilt, so the worker stores the
+    new settings while the live gateway keeps the old ones. ``pending_restart``
+    names the fields that differ, which is what the UI needs to tell an operator
+    that a restart is required.
+    """
+    worker = _make_worker(tmp_path)
+    settings = ModbusServiceSettings(
+        host="127.0.0.1",
+        port=_free_port(),
+        serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
+        allow_unknown_devices=True,
+    )
+    assert await worker._build_and_start_gateway(settings) is True
+    try:
+        assert build_telemetry(worker).pending_restart == []
+
+        # A later delivery is stored but does not rebuild the gateway.
+        worker._apply_modbus_settings(
+            ModbusServiceSettings(
+                host="127.0.0.1",
+                port=settings.port,
+                serial=ModbusSerialSettings(port="/dev/nonexistent-port-xyz"),
+                allow_unknown_devices=False,
+            )
+        )
+
+        assert build_telemetry(worker).pending_restart == ["allow_unknown_devices"]
+    finally:
+        await worker.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_telemetry_loop_writes_key_with_ttl(tmp_path, monkeypatch) -> None:
     """The Telemetry manager writes to scietex:{service}:{instance}:telemetry, TTL 6."""
     monkeypatch.setattr("scietex.modbus_service.modbus_worker.TELEMETRY_INTERVAL", 0)

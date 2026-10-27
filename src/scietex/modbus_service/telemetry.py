@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING
 
 import msgspec
 
+from .config import to_gateway_config
+
 if TYPE_CHECKING:
+    from scietex.hal.serial import ModbusGateway
+
     from .modbus_worker import ModbusWorker
 
 #: Push cadence and key TTL (§5.2): 2 s interval, 6 s TTL so a single missed
@@ -66,6 +70,12 @@ class ModbusGatewayTelemetry(msgspec.Struct, frozen=True):
     #: observed addresses — an id may be observed (a client addressed it) while
     #: having no entry here, which is what "unknown address" means.
     routed: list[int]
+    #: Settings the worker has accepted but the running gateway has not picked
+    #: up. The gateway is built once and never rebuilt, so a delivered change
+    #: only takes effect on restart; this lists the fields that differ between
+    #: the desired settings and the live gateway config. Empty when the gateway
+    #: matches what was delivered.
+    pending_restart: list[str]
     bus: ModbusBusStats
     timestamp: datetime = msgspec.field(default_factory=lambda: datetime.now(timezone.utc))
     schema_version: int = 1
@@ -82,6 +92,45 @@ def _last_seen_datetime(last_seen: float | None) -> datetime | None:
     if last_seen is None:
         return None
     return datetime.now(timezone.utc) - timedelta(seconds=time.monotonic() - last_seen)
+
+
+def _pending_restart(worker: ModbusWorker, gateway: ModbusGateway) -> list[str]:
+    """Return the settings the running gateway has not picked up.
+
+    The gateway is built once from the settings delivered at that moment and is
+    never rebuilt, so a later delivery is stored but inert until restart. The
+    desired settings live on the worker; the live ones on ``gateway.config``.
+    Comparing the two names the fields an operator must restart to apply.
+    """
+    settings = worker.modbus_settings
+    if settings is None:
+        return []
+    desired = to_gateway_config(settings)
+    live = gateway.config
+    pending = [
+        name
+        for name in ("host", "port", "default_framer", "allow_unknown_devices", "bus_retries")
+        if getattr(desired, name) != getattr(live, name)
+    ]
+    if desired.devices != live.devices:
+        pending.append("devices")
+    if _serial_differs(desired.serial, live.serial):
+        pending.append("serial")
+    if desired.circuit_breaker != live.circuit_breaker:
+        pending.append("circuit_breaker")
+    return pending
+
+
+def _serial_differs(desired: object, live: object) -> bool:
+    """Compare two serial configs field by field.
+
+    ``ModbusSerialConnectionConfig`` does not implement value equality: two
+    structurally identical instances compare unequal, so ``==`` would report a
+    pending restart on every snapshot. The fields below are the ones the gateway
+    actually opens the port with.
+    """
+    fields = ("port", "baudrate", "bytesize", "parity", "stopbits", "timeout")
+    return any(getattr(desired, name, None) != getattr(live, name, None) for name in fields)
 
 
 def build_telemetry(worker: ModbusWorker) -> ModbusGatewayTelemetry:
@@ -105,6 +154,7 @@ def build_telemetry(worker: ModbusWorker) -> ModbusGatewayTelemetry:
             client_count=0,
             devices=[],
             routed=[],
+            pending_restart=[],
             bus=ModbusBusStats(0, 0, 0),
         )
 
@@ -131,5 +181,6 @@ def build_telemetry(worker: ModbusWorker) -> ModbusGatewayTelemetry:
         client_count=tcp_server.client_count if tcp_server is not None else 0,
         devices=devices,
         routed=sorted(gateway.config.devices),
+        pending_restart=_pending_restart(worker, gateway),
         bus=ModbusBusStats(metrics.requests, metrics.errors, metrics.retries),
     )
