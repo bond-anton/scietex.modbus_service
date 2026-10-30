@@ -73,6 +73,46 @@ version from `version.py`. It passes that version as the `VERSION` build arg, so
 the image always installs the matching PyPI release. Pass `--latest` to also
 push the `latest` tag.
 
+#### Vendor protocol plugins
+
+The core service is vendor-agnostic: it ships no device drivers. A device whose
+protocol is not plain Modbus needs its driver installed in the image, or the
+gateway rejects the delivered config with
+
+```
+Cannot import module 'scietex.hal.vacuum_gauge...'
+```
+
+Two build args carry them, both empty by default:
+
+| Build arg | `build_image.sh` flag | Meaning |
+| --- | --- | --- |
+| `EXTRAS` | `--extras <name>` | Comma-separated extras of `scietex.modbus_service` |
+| `PLUGINS` | `--plugins <spec>` | Extra pip requirement specs, space-separated |
+
+The package declares one extra today:
+
+| Extra | Installs | For |
+| --- | --- | --- |
+| `vacuum-gauge` | `scietex.hal.vacuum_gauge` | Thyracont / Erstevak vacuum gauges |
+
+Build an image that can drive a vacuum gauge:
+
+```bash
+./build_image.sh --extras vacuum-gauge
+```
+
+Verify the driver landed in the image before deploying it:
+
+```bash
+podman run --rm --entrypoint python \
+  registry.buro-nts.ru/scietex-modbus-service:2.7.0 \
+  -c "import scietex.hal.vacuum_gauge; print('ok')"
+```
+
+An image built without the extra still runs — it just cannot serve those
+devices, and the failure only shows up when the remote config is applied.
+
 ### Run
 
 ```bash
@@ -103,7 +143,7 @@ UserNS=keep-id
 GroupAdd=keep-groups
 Volume=%h/.config/scietex:/config:z
 Volume=%h/.config/scietex-modbus-container/valkey.yml:/config/valkey.yml:Z
-PublishPort=15020:15020
+PublishPort=15020:502
 # The gateway binds the Modbus/TCP port from the applied config, which defaults
 # to 502 (privileged). Without this capability the worker fails to start with
 # EACCES on bind. Drop it only if the configured port is >= 1024.
@@ -193,6 +233,37 @@ one of:
 The `Containerfile` does **not** grant the capability by default; the operator
 chooses at run time. The Quadlet example above grants it, because the default
 applied config binds 502.
+
+## Reaching the gateway from another container
+
+The gateway listens on the Modbus/TCP port from the applied config (502 by
+default). A client that runs in its own container — a vacuum-gauge worker, for
+example — must not be pointed at `127.0.0.1`: inside that container loopback is
+the client itself, not the gateway. Two addresses work:
+
+| Client runs | Gateway address | Requires |
+| --- | --- | --- |
+| On the host | `127.0.0.1:<published port>` | `PublishPort` on the gateway quadlet |
+| In a container | `host.containers.internal:<published port>` | `PublishPort` on the gateway quadlet |
+
+`host.containers.internal` resolves to the host's address from inside a rootless
+Podman container, so the client reaches the gateway through the published port.
+The published port is the **host** side of `PublishPort`; the container side
+must match the port the gateway actually binds.
+
+The Quadlet example publishes `15020:502`, so a client container uses
+`host.containers.internal:15020`. The container side stays at the port the
+gateway binds; only the host side is free to choose. Publishing a
+non-privileged host port also lets the gateway drop `NET_BIND_SERVICE` if the
+applied config binds 15020 instead of 502.
+
+Record the host-side port as `published_port` on the modbus service
+configuration. The API cannot read the quadlet, so this is the only place a
+client — or the UI that configures one — can learn the port to dial.
+
+A client configured with the wrong address fails at connect time, not at config
+apply time — the gateway never sees the request. Check the client's own logs for
+connection errors before suspecting the gateway.
 
 ## Config volume
 
