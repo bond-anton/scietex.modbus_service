@@ -90,16 +90,17 @@ Two build args carry them, both empty by default:
 | `EXTRAS` | `--extras <name>` | Comma-separated extras of `scietex.modbus_service` |
 | `PLUGINS` | `--plugins <spec>` | Extra pip requirement specs, space-separated |
 
-The package declares one extra today:
+The package declares two extras:
 
 | Extra | Installs | For |
 | --- | --- | --- |
 | `vacuum-gauge` | `scietex.hal.vacuum_gauge` | Thyracont / Erstevak vacuum gauges |
+| `vfd` | `scietex.hal.vfd` | Intek SPE-B and Vesper E5-8200 / E4-8400 drives |
 
-Build an image that can drive a vacuum gauge:
+Build an image that can drive a vacuum gauge and a VFD:
 
 ```bash
-./build_image.sh --extras vacuum-gauge
+./build_image.sh --extras vacuum-gauge,vfd
 ```
 
 Verify the driver landed in the image before deploying it:

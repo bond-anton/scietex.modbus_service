@@ -31,6 +31,7 @@ test = ["pytest", "pytest-asyncio"]
 # installs the extra for the hardware on the bus. See
 # docs/design/nonstandard-protocol-plugins.md.
 vacuum-gauge = ["scietex.hal.vacuum_gauge>=2.0.0,<3.0.0"]
+vfd = ["scietex.hal.vfd>=2.0.2,<3.0.0"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

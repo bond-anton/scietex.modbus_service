@@ -1,3 +1,3 @@
 """Version of the `scietex.modbus_service` package"""
 
-__version__ = "2.8.0"
+__version__ = "2.9.0"
