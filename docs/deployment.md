@@ -101,10 +101,10 @@ device — that is, when the device's protocol is not plain Modbus. The vacuum
 gauges ship translators for the Thyracont and Erstevak RS485 protocols, so the
 gateway cannot frame them without the package.
 
-Standard Modbus devices need no extra: their descriptors are built into
-`scietex.hal.serial`, a core dependency. That covers the film thickness monitors
-(`scietex_ftmone`, `cyky_tm106b`) and the VFD drives (`intek_spe_b`,
-`vesper_e5_8200`, `vesper_e4_8400`).
+Standard Modbus devices need no extra: `scietex.hal.serial`, a core dependency,
+ships two generic descriptors, `standard_rtu` and `standard_ascii`. A device
+that speaks plain Modbus picks one of them and carries its own identity in the
+device name, so no per-vendor descriptor is involved.
 
 Build an image that can drive a vacuum gauge:
 

@@ -11,7 +11,7 @@ classifiers = [
   "Programming Language :: Python :: 3",
 ]
 dependencies = [
-  "scietex.hal.serial>=2.5.0",
+  "scietex.hal.serial>=2.6.0",
   "scietex.service[valkey]~=6.2.0",
 ]
 dynamic = ["version"]
@@ -33,8 +33,8 @@ test = ["pytest", "pytest-asyncio"]
 #
 # Only a device whose protocol is not plain Modbus needs an extra: the gateway
 # must import the vendor's framer/decoder/PDU/translator to route it. Standard
-# Modbus devices are covered by the descriptors built into scietex.hal.serial,
-# which is a core dependency — the VFD drives are among them.
+# Modbus devices are covered by the two generic descriptors built into
+# scietex.hal.serial, which is a core dependency.
 vacuum-gauge = ["scietex.hal.vacuum_gauge>=2.0.0,<3.0.0"]
 
 [build-system]
