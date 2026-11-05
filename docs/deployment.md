@@ -90,17 +90,26 @@ Two build args carry them, both empty by default:
 | `EXTRAS` | `--extras <name>` | Comma-separated extras of `scietex.modbus_service` |
 | `PLUGINS` | `--plugins <spec>` | Extra pip requirement specs, space-separated |
 
-The package declares two extras:
+The package declares one extra:
 
 | Extra | Installs | For |
 | --- | --- | --- |
 | `vacuum-gauge` | `scietex.hal.vacuum_gauge` | Thyracont / Erstevak vacuum gauges |
-| `vfd` | `scietex.hal.vfd` | Intek SPE-B and Vesper E5-8200 / E4-8400 drives |
 
-Build an image that can drive a vacuum gauge and a VFD:
+An extra is needed only when the gateway must import vendor code to route a
+device — that is, when the device's protocol is not plain Modbus. The vacuum
+gauges ship translators for the Thyracont and Erstevak RS485 protocols, so the
+gateway cannot frame them without the package.
+
+Standard Modbus devices need no extra: their descriptors are built into
+`scietex.hal.serial`, a core dependency. That covers the film thickness monitors
+(`scietex_ftmone`, `cyky_tm106b`) and the VFD drives (`intek_spe_b`,
+`vesper_e5_8200`, `vesper_e4_8400`).
+
+Build an image that can drive a vacuum gauge:
 
 ```bash
-./build_image.sh --extras vacuum-gauge,vfd
+./build_image.sh --extras vacuum-gauge
 ```
 
 Verify the driver landed in the image before deploying it:

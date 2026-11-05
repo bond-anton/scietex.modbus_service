@@ -30,8 +30,12 @@ test = ["pytest", "pytest-asyncio"]
 # Vendor protocol plugins. The core service stays vendor-agnostic; an operator
 # installs the extra for the hardware on the bus. See
 # docs/design/nonstandard-protocol-plugins.md.
+#
+# Only a device whose protocol is not plain Modbus needs an extra: the gateway
+# must import the vendor's framer/decoder/PDU/translator to route it. Standard
+# Modbus devices are covered by the descriptors built into scietex.hal.serial,
+# which is a core dependency — the VFD drives are among them.
 vacuum-gauge = ["scietex.hal.vacuum_gauge>=2.0.0,<3.0.0"]
-vfd = ["scietex.hal.vfd>=2.0.2,<3.0.0"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
